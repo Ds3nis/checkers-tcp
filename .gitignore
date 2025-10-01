@@ -1,0 +1,29 @@
+# Системні файли
+.DS_Store
+Thumbs.db
+
+# IDE (IntelliJ IDEA, Eclipse, NetBeans)
+.idea/
+*.iml
+*.ipr
+*.iws
+*.sw?
+.vscode/
+
+# Java/Gradle
+/build/
+out/
+target/
+.gradle/
+*.log
+
+# Кеші та тимчасове
+*.class
+*.jar
+*.war
+*.ear
+
+# Генеровані та резервні файли
+*.bak
+*.tmp
+*.~*
