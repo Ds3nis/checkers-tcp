@@ -1,0 +1,43 @@
+.black-background{
+    -fx-background-color: #11151C;
+}
+
+.primary-red{
+    -fx-text-fill: #DC2424;
+}
+
+.transparent{
+    -fx-background-color: #F7FAFC;
+}
+
+.card {
+    -fx-background-radius: 12;
+    -fx-background-insets: 0;
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1C2028 0%, #242933 100%);
+}
+
+.text-input:focused {
+    -fx-prompt-text-fill: #95A5B8;
+    -fx-background-radius: 12;
+    -fx-background-color: #11151C;
+    -fx-border-color: #DD2E44;
+    -fx-font-size: 16;
+}
+
+.text-input{
+    -fx-prompt-text-fill: #95A5B8;
+    -fx-background-radius: 12;
+    -fx-background-color: #11151C;
+    -fx-font-size: 16;
+}
+
+
+
+.root * {
+    -fx-font-family: "Segoe UI", ".SF NS Text", "SF Pro Text",
+    "Helvetica Neue", "Roboto", "Ubuntu", "Cantarell", "Oxygen", "Noto Sans", sans-serif;
+
+}
+
+/* опціонально: заголовки */
+.title { -fx-font-size: 24px; -fx-font-weight: 700; }

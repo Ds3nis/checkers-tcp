@@ -27,7 +27,7 @@ tasks.withType<JavaCompile> {
 
 application {
     mainModule.set("com.checkerstcp.checkerstcp")
-    mainClass.set("com.checkerstcp.checkerstcp.HelloApplication")
+    mainClass.set("com.checkerstcp.checkerstcp.Main")
 
 }
 
