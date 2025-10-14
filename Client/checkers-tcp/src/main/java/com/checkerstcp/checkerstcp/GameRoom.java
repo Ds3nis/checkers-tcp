@@ -10,7 +10,7 @@ public class GameRoom {
     private RoomStatus roomStatus;
     private List<Player> players;
 
-    public GameRoom(String name, List<Player> players, int id) throws Exception {
+    public GameRoom(int id, String name, List<Player> players) throws Exception {
         this.name = name;
         this.id = id;
         this.roomStatus = RoomStatus.WAITING_FOR_PLAYERS;
@@ -22,7 +22,7 @@ public class GameRoom {
     }
 
     private void setPlayers(List<Player> players) throws Exception {
-        if (players.isEmpty() ||  players.size() != 2) {
+        if (players.isEmpty() ||  players.size() > 2) {
             throw new Exception("Invalid number of players");
         }
 

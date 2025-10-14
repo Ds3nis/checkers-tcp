@@ -24,11 +24,108 @@
     -fx-font-size: 16;
 }
 
+.connect-button {
+    -fx-background-radius: 12;
+    -fx-background-insets: 0;
+    -fx-padding: 0 32 0 32;
+    -fx-min-height: 44;
+    -fx-font-size: 16;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #E03131 0%, #C92A2A 100%);
+    -fx-effect: dropshadow(gaussian, rgba(224,49,49,0.3), 15, 0.3, 0, 0);
+    -fx-cursor: hand;
+}
+
+.connect-button:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #C92A2A 0%, #A52727 100%);
+}
+
+.connect-button:pressed {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #A52727 0%, #801F1F 100%);
+}
+
 .text-input{
     -fx-prompt-text-fill: #95A5B8;
     -fx-background-radius: 12;
     -fx-background-color: #11151C;
     -fx-font-size: 16;
+}
+
+.card-headertxt{
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #F8FAFC;
+}
+
+.refresh-button {
+    -fx-background-color: #272B35;
+    -fx-background-radius: 10px;
+    -fx-min-width: 40px;
+    -fx-min-height: 40px;
+    -fx-max-width: 40px;
+    -fx-max-height: 40px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(220,40,40,0.25), 18, 0.3, 0, 0);
+    -fx-text-fill: #F8FAFC;
+}
+
+
+.refresh-button:hover {
+    -fx-background-color: #303540;
+}
+
+
+.create-room-button {
+    -fx-background-radius: 10px;
+    -fx-background-insets: 0;
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #DC2828 0%, #BA2C2C 100%);
+    -fx-text-fill: #F8FAFC;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-padding: 8px 16px 8px 16px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(220,40,40,0.25), 18, 0.3, 0, 0);
+    -fx-alignment: center;
+}
+
+
+.create-room-button:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #C72525 0%, #A82626 100%);
+}
+
+.scroll-pane{
+    -fx-background-color: #1C2028;
+    -fx-background: #1C2028;
+}
+
+.connect-room-button{
+    -fx-background-radius: 10px;
+    -fx-background-insets: 0;
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #DC2828 0%, #BA2C2C 100%);
+    -fx-text-fill: #F8FAFC;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-padding: 8px 16px 8px 16px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(220,40,40,0.25), 18, 0.3, 0, 0);
+    -fx-alignment: center;
+}
+
+.footer{
+    -fx-background-color: #202232;
+}
+
+.footer-text{
+    -fx-font-size: 12;
+    -fx-font-weight: bold;
+    -fx-text-fill: #99A2B5;
+}
+
+.footer-status{
+    -fx-font-size: 12;
+    -fx-font-weight: bold;
+    -fx-text-fill: #750202;
 }
 
 
@@ -39,5 +136,4 @@
 
 }
 
-/* опціонально: заголовки */
 .title { -fx-font-size: 24px; -fx-font-weight: 700; }

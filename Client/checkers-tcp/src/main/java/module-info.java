@@ -13,6 +13,7 @@ module com.checkerstcp.checkerstcp {
     requires java.desktop;
 
     opens com.checkerstcp.checkerstcp to javafx.fxml;
+    opens com.checkerstcp.checkerstcp.controller to javafx.fxml;
     exports com.checkerstcp.checkerstcp;
     exports com.checkerstcp.checkerstcp.controller;
 }

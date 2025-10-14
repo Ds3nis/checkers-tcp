@@ -6,12 +6,14 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
 
-<VBox maxHeight="-Infinity" maxWidth="-Infinity" minHeight="400.0" minWidth="350.0" prefHeight="600.0" prefWidth="700.0" styleClass="black-background" stylesheets="@css/lobby.css" xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.checkerstcp.checkerstcp.controller.LobbyController">
+<VBox alignment="CENTER" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="400.0" minWidth="350.0" prefHeight="600.0" prefWidth="700.0" styleClass="black-background" stylesheets="@css/lobby.css" xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.checkerstcp.checkerstcp.controller.LobbyController">
    <children>
       <VBox alignment="CENTER" prefHeight="95.0" prefWidth="700.0" spacing="5.0">
          <children>
@@ -36,19 +38,26 @@
             <Insets left="15.0" right="15.0" top="15.0" />
          </padding>
       </VBox>
-      <VBox maxHeight="160.0" prefHeight="160.0" prefWidth="640.0" spacing="10.0" stylesheets="@css/lobby.css">
+      <VBox maxHeight="160.0" prefHeight="98.0" prefWidth="536.0" spacing="10.0" stylesheets="@css/lobby.css">
          <VBox.margin>
-            <Insets left="5.0" right="5.0" top="10.0" />
+            <Insets left="30.0" right="30.0" top="10.0" />
          </VBox.margin>
          <children>
-            <Label text="Připojení k serveru" textFill="#f7fafc">
-               <font>
-                  <Font name="System Bold" size="20.0" />
-               </font>
-            </Label>
-            <HBox alignment="CENTER_LEFT" prefHeight="128.0" prefWidth="640.0">
+            <HBox alignment="CENTER_LEFT" prefHeight="100.0" prefWidth="200.0">
                <children>
-                  <TextField prefHeight="35.0" prefWidth="530.0" promptText="localhost:8080" styleClass="text-input" stylesheets="@css/lobby.css">
+                  <Label text="Připojení k serveru" textFill="#f7fafc">
+                     <font>
+                        <Font name="System Bold" size="20.0" />
+                     </font>
+                  </Label>
+               </children>
+               <VBox.margin>
+                  <Insets />
+               </VBox.margin>
+            </HBox>
+            <HBox alignment="CENTER_LEFT" prefHeight="128.0" prefWidth="640.0" spacing="10.0">
+               <children>
+                  <TextField fx:id="ipField" prefHeight="35.0" prefWidth="530.0" promptText="localhost:8080" styleClass="text-input" stylesheets="@css/lobby.css">
                      <padding>
                         <Insets bottom="8.0" left="12.0" right="12.0" top="8.0" />
                      </padding>
@@ -56,8 +65,8 @@
                         <Font size="16.0" />
                      </font>
                   </TextField>
-                  <Region prefHeight="33.0" prefWidth="215.0" HBox.hgrow="ALWAYS" />
-                  <Button mnemonicParsing="false" prefHeight="44.0" prefWidth="343.0" text="Připojit se" />
+                  <Region prefHeight="44.0" prefWidth="108.0" HBox.hgrow="ALWAYS" />
+                  <Button fx:id="connectBtn" maxWidth="250.0" minWidth="100.0" mnemonicParsing="false" prefHeight="44.0" prefWidth="343.0" styleClass="connect-button" stylesheets="@css/lobby.css" text="Připojit se" HBox.hgrow="ALWAYS" />
                </children></HBox>
          </children>
          <padding>
@@ -68,28 +77,54 @@
             <String fx:value="transparent" />
          </styleClass>
       </VBox>
-      <VBox prefHeight="425.0" prefWidth="700.0">
+      <VBox prefHeight="425.0" prefWidth="700.0" styleClass="card" stylesheets="@css/lobby.css" VBox.vgrow="ALWAYS">
          <children>
-            <HBox prefHeight="54.0" prefWidth="700.0">
+            <HBox alignment="CENTER" prefHeight="46.0" prefWidth="600.0">
                <VBox.margin>
-                  <Insets />
-               </VBox.margin></HBox>
-            <ScrollPane fitToWidth="true" hbarPolicy="NEVER" prefHeight="326.0" prefWidth="700.0" VBox.vgrow="ALWAYS">
-               <content>
-                  <VBox prefHeight="326.0" prefWidth="701.0" />
-               </content>
-            </ScrollPane>
+                  <Insets left="20.0" right="20.0" />
+               </VBox.margin>
+               <children>
+                  <Label maxWidth="170.0" minWidth="170.0" prefHeight="24.0" prefWidth="170.0" styleClass="card-headertxt" stylesheets="@css/lobby.css" text="Volné místnosti" HBox.hgrow="ALWAYS" />
+                  <Region prefHeight="46.0" prefWidth="318.0" />
+                  <HBox alignment="CENTER_RIGHT" prefHeight="46.0" prefWidth="399.0" spacing="10.0" HBox.hgrow="SOMETIMES">
+                     <children>
+                        <Button fx:id="reloadBtn" maxWidth="45.0" mnemonicParsing="false" prefHeight="40.0" prefWidth="45.0" styleClass="refresh-button" stylesheets="@css/lobby.css">
+                           <graphic>
+                              <ImageView fitHeight="24.0" fitWidth="29.0" pickOnBounds="true" preserveRatio="true">
+                                 <image>
+                                    <Image url="@images/reload.png" />
+                                 </image>
+                              </ImageView>
+                           </graphic></Button>
+                        <Button fx:id="createRoomBtn" maxWidth="210.0" minWidth="150.0" mnemonicParsing="false" prefHeight="35.0" prefWidth="191.0" styleClass="create-room-button" stylesheets="@css/lobby.css" text="+   Vytvořit místnost" />
+                     </children>
+                  </HBox>
+               </children>
+               <padding>
+                  <Insets bottom="15.0" top="15.0" />
+               </padding></HBox>
+            <VBox prefHeight="200.0" prefWidth="474.0" VBox.vgrow="SOMETIMES">
+               <VBox.margin>
+                  <Insets left="20.0" right="20.0" />
+               </VBox.margin>
+               <children>
+                  <ScrollPane fx:id="scrollPane" fitToHeight="true" fitToWidth="true" hbarPolicy="NEVER" prefHeight="200.0" prefWidth="200.0" stylesheets="@css/lobby.css" vbarPolicy="NEVER" VBox.vgrow="ALWAYS" />
+               </children>
+            </VBox>
          </children>
          <VBox.margin>
-            <Insets top="40.0" />
+            <Insets left="30.0" right="30.0" top="20.0" />
          </VBox.margin>
       </VBox>
-      <HBox alignment="CENTER_RIGHT" prefHeight="69.0" prefWidth="700.0" spacing="10.0">
-         <Label text="Статус мережі:" />
-         <Label fx:id="netState" text="offline" />
+      <HBox alignment="CENTER_RIGHT" prefHeight="40.0" prefWidth="700.0" spacing="10.0" styleClass="footer" stylesheets="@css/lobby.css">
+         <Label styleClass="footer-text" stylesheets="@css/lobby.css" text="Stav sítě:" />
+         <Label fx:id="netStateLbl" styleClass="footer-status" stylesheets="@css/lobby.css" text="offline" />
          <padding>
             <Insets bottom="5.0" right="10.0" top="5.0" />
          </padding>
+         <VBox.margin>
+            <Insets top="10.0" />
+         </VBox.margin>
       </HBox>
    </children>
 </VBox>

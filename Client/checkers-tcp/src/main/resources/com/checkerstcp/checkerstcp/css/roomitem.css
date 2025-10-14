@@ -1,0 +1,65 @@
+.room-card{
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1C2028 0%, #242933 100%);
+    -fx-border-color: #2B303B;
+    -fx-border-width: 1;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 12, 0.3, 0, 2);
+    -fx-transition: all 0.3s ease;
+}
+
+.room-card:hover {
+    -fx-border-color: #DC2828;
+    -fx-effect: dropshadow(gaussian, rgba(220,40,40,0.35), 16, 0.4, 0, 4);
+}
+
+.room-card Label {
+    -fx-text-fill: #F8FAFC;
+    -fx-font-size: 14px;
+}
+
+#roomNumberLbl {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #FFFFFF;
+}
+
+#roomStatusLbl {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-padding: 1 6 1 6;
+    -fx-background-radius: 8;
+    -fx-text-fill: #FFFFFF;
+}
+
+.room-open {
+    -fx-background-color: #16A34A;
+}
+.room-full {
+    -fx-background-color: #DC2626;
+}
+.room-pending {
+    -fx-background-color: #EAB308;
+}
+
+
+.room-card ImageView {
+    -fx-opacity: 0.9;
+}
+
+#createRoomBtn, #connectToRoomBtn {
+    -fx-background-radius: 10px;
+    -fx-background-insets: 0;
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #DC2828 0%, #BA2C2C 100%);
+    -fx-text-fill: #F8FAFC;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-padding: 6px 14px 6px 14px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(220,40,40,0.25), 12, 0.3, 0, 0);
+}
+
+
+#createRoomBtn:hover, #connectToRoomBtn:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #C72525 0%, #A82626 100%);
+}
