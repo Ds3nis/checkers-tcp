@@ -1,0 +1,118 @@
+/*****************************
+ *     PLAYER SIDE PANEL
+ *****************************/
+
+.player-card {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1C2028 0%, #242933 100%);
+    -fx-border-radius: 16;
+    -fx-background-radius: 16;
+    -fx-padding: 16;
+    -fx-spacing: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 10, 0.2, 0, 0);
+    -fx-max-width: 350px;
+}
+
+.player-card.red {
+    -fx-border-color: rgba(255, 80, 80, 0.3);
+    -fx-border-width: 2;
+}
+
+.player-card.black {
+    -fx-border-color: rgba(80, 80, 80, 0.3);
+    -fx-border-width: 2;
+}
+
+
+.player-header {
+    -fx-alignment: center-left;
+}
+
+.player-name {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 18px;
+    -fx-font-weight: 700;
+}
+
+.player-badge {
+    -fx-background-color: #333;
+    -fx-text-fill: #fff;
+    -fx-background-radius: 30;
+    -fx-padding: 2 20;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.player-badge.active {
+    -fx-background-color: linear-gradient(to right, #ff4a4a, #ff7070);
+}
+
+.player-badge.waiting {
+    -fx-background-color: rgba(255, 255, 255, 0.15);
+    -fx-text-fill: #ccc;
+}
+
+.player-color {
+    -fx-spacing: 8;
+}
+
+.piece-preview {
+    -fx-min-width: 32;
+    -fx-min-height: 32;
+    -fx-max-width: 32;
+    -fx-max-height: 32;
+    -fx-background-radius: 50%;
+    -fx-border-color: rgba(255,255,255,0.6);
+    -fx-border-radius: 50%;
+    -fx-border-width: 2;
+    -fx-effect: dropshadow(gaussian, rgba(255,255,255,0.15), 6, 0.2, 0, 0);
+}
+
+.red-piece {
+    -fx-background-color: #c0392b;
+    -fx-border-color: rgba(255,255,255,0.6);
+}
+
+.black-piece {
+    -fx-background-color: #111;
+    -fx-border-color: rgba(255,255,255,0.6);
+}
+
+.piece-color-name {
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 14px;
+}
+
+.piece-count {
+    -fx-font-size: 24px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #ffffff;
+}
+
+.moves-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #b0b3b8;
+}
+
+.moves-scroll {
+    -fx-background-color: transparent;
+    -fx-padding: 4;
+}
+
+.moves-scroll .viewport {
+    -fx-background-color: transparent;
+}
+
+.move-item {
+    -fx-background-color: #2a2a2d;
+    -fx-background-radius: 10;
+    -fx-padding: 6 10;
+    -fx-font-size: 11px;
+    -fx-text-fill: #e6e6e6;
+    -fx-spacing: 2;
+}
+
+.move-item .timestamp {
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 10px;
+}

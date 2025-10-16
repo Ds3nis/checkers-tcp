@@ -1,0 +1,84 @@
+.border-pane{
+    -fx-background-color: #121318;
+}
+
+
+/*      Header     */
+.header {
+    -fx-padding: 0 20 0 20;
+    -fx-alignment: center;
+    -fx-min-height: 60;
+    -fx-spacing: 10;
+    -fx-border-color: rgba(255, 255, 255, 0.06);
+    -fx-border-width: 0 0 1 0;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0.2, 0, 0);
+}
+
+.room-label {
+    -fx-text-fill: #FFFFFF;
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.room-name-label {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 19px;
+    -fx-font-weight: bold;
+}
+
+.burger-menu-btn {
+    -fx-background-color: transparent;
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 0;
+    -fx-cursor: hand;
+    -fx-min-width: 40;
+    -fx-min-height: 40;
+    -fx-alignment: center;
+}
+
+.burger-menu-btn:hover {
+    -fx-background-color: rgba(255,255,255,0.07);
+    -fx-border-color: rgba(255,255,255,0.2);
+}
+
+.burger-menu-btn:pressed {
+    -fx-background-color: rgba(255,255,255,0.15);
+}
+
+.header > * {
+    -fx-alignment: center;
+}
+
+
+
+
+/*      Footer     */
+.footer{
+    -fx-background-color: #202232;
+    -fx-padding: 5 20 5 20;
+}
+
+.chat-btn{
+    -fx-background-color: #BB3E33;
+    -fx-min-height: 30;
+    -fx-max-height: 30;
+    -fx-padding: 4;
+    -fx-background-radius: 15;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(220,40,40,0.25), 18, 0.3, 0, 0);
+}
+
+.footer-text{
+    -fx-font-size: 12;
+    -fx-font-weight: bold;
+    -fx-text-fill: #99A2B5;
+}
+
+.footer-status{
+    -fx-font-size: 12;
+    -fx-font-weight: bold;
+    -fx-text-fill: #750202;
+}
