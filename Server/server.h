@@ -5,16 +5,15 @@
 #ifndef SERVER_SERVER_H
 #define SERVER_SERVER_H
 
-#ifndef SERVER_H
-#define SERVER_H
-
 #include <pthread.h>
 #include <stdbool.h>
 #include "game.h"
+#include "protocol.h"
 
 #define MAX_CLIENTS 100
 #define MAX_ROOMS 50
 #define BUFFER_SIZE 8192
+
 
 // Client structure
 typedef struct {
@@ -38,6 +37,12 @@ typedef struct {
     pthread_mutex_t clients_mutex;
     pthread_mutex_t rooms_mutex;
 } Server;
+
+typedef struct {
+    Server *server;
+    int client_socket;
+    int client_idx;
+} ClientThreadArgs;
 
 // Function prototypes
 int server_init(Server *server, int port);
@@ -69,6 +74,6 @@ void handle_ping(Server *server, Client *client);
 void send_message(int socket, OpCode op, const char *data);
 void broadcast_to_room(Server *server, const char *room_name, OpCode op, const char *data);
 
-#endif // SERVER_H
+void log_client (const Client *client);
 
 #endif //SERVER_SERVER_H
