@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+
+<HBox fx:id="moveItemCard" alignment="CENTER_LEFT" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" styleClass="move-item-card" stylesheets="@css/moveitem.css" xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.checkerstcp.checkerstcp.controller.PlayerMoveItemController">
+   <children>
+      <VBox fx:id="leftSectionCard" styleClass="move-item-card">
+         <children>
+            <Label fx:id="fromToMoveLbl" styleClass="from-to-move" text="E3 → D4" />
+            <Label fx:id="moveTimeLbl" styleClass="move-time" text="14:25" />
+         </children>
+      </VBox>
+   </children>
+</HBox>

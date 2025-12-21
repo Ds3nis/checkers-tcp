@@ -57,7 +57,16 @@
             </HBox>
             <HBox alignment="CENTER_LEFT" prefHeight="128.0" prefWidth="640.0" spacing="10.0">
                <children>
-                  <TextField fx:id="ipField" prefHeight="35.0" prefWidth="530.0" promptText="localhost:8080" styleClass="text-input" stylesheets="@css/lobby.css">
+                  <TextField fx:id="ipField" prefHeight="35.0" prefWidth="315.0" promptText="localhost:8080" styleClass="text-input" stylesheets="@css/lobby.css">
+                     <padding>
+                        <Insets bottom="8.0" left="12.0" right="12.0" top="8.0" />
+                     </padding>
+                     <font>
+                        <Font size="16.0" />
+                     </font>
+                  </TextField>
+                  <Region prefHeight="44.0" prefWidth="108.0" />
+                  <TextField fx:id="portField" prefHeight="35.0" prefWidth="212.0" promptText="Port" styleClass="text-input" stylesheets="@css/lobby.css">
                      <padding>
                         <Insets bottom="8.0" left="12.0" right="12.0" top="8.0" />
                      </padding>

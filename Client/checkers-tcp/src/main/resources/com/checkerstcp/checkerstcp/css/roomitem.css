@@ -1,3 +1,7 @@
+/*****************************
+ *     ROOM ITEM CARD
+ *****************************/
+
 .room-card{
     -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1C2028 0%, #242933 100%);
     -fx-border-color: #2B303B;

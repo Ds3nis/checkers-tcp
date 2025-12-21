@@ -1,3 +1,7 @@
+/*****************************
+ *     MAIN GAME
+ *****************************/
+
 .border-pane{
     -fx-background-color: #121318;
 }
@@ -81,4 +85,36 @@
     -fx-font-size: 12;
     -fx-font-weight: bold;
     -fx-text-fill: #750202;
+}
+
+.cell-light {
+    -fx-background-color: #D2B48C;
+}
+
+.cell-dark {
+    -fx-background-color: #5C4033;
+}
+
+.piece {
+    -fx-stroke: #ffffff;
+    -fx-stroke-width: 2px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 5, 0, 0, 2);
+}
+
+.menu-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-alignment: center-left;
+    -fx-padding: 8 0 8 10;
+    -fx-cursor: hand;
+}
+
+.menu-button:hover {
+    -fx-background-color: rgba(255,255,255,0.1);
+    -fx-text-fill: #f5f5f5;
+}
+
+.menu-button:pressed {
+    -fx-background-color: rgba(255,255,255,0.2);
 }
