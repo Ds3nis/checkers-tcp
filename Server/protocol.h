@@ -45,4 +45,5 @@ int create_message(char *buffer, OpCode op, const char *data);
 void log_message(const char *prefix, const Message *msg);
 
 
+
 #endif //SERVER_PROTOCOL_H
