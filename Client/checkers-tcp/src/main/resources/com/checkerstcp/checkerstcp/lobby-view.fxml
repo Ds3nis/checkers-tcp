@@ -15,13 +15,13 @@
 
 <VBox alignment="CENTER" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="400.0" minWidth="350.0" prefHeight="600.0" prefWidth="700.0" styleClass="black-background" stylesheets="@css/lobby.css" xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.checkerstcp.checkerstcp.controller.LobbyController">
    <children>
-      <VBox alignment="CENTER" prefHeight="95.0" prefWidth="700.0" spacing="5.0">
+      <VBox alignment="CENTER" prefHeight="95.0" prefWidth="700.0">
          <children>
-            <HBox alignment="CENTER" prefHeight="100.0" prefWidth="200.0">
+            <HBox alignment="CENTER" prefHeight="100.0" prefWidth="670.0">
                <children>
-                  <Label lineSpacing="1.0" prefWidth="317.0" styleClass="primary-red" stylesheets="@css/lobby.css" text="Dáma Online" textAlignment="CENTER" wrapText="true">
+                  <Label lineSpacing="1.0" styleClass="primary-red" stylesheets="@css/lobby.css" text="Dáma Online" textAlignment="CENTER" wrapText="true">
                      <font>
-                        <Font name="Segoe UI" size="55.0" />
+                        <Font name="Segoe UI" size="42.0" />
                      </font>
                   </Label>
                </children>
@@ -38,7 +38,7 @@
             <Insets left="15.0" right="15.0" top="15.0" />
          </padding>
       </VBox>
-      <VBox maxHeight="160.0" prefHeight="98.0" prefWidth="536.0" spacing="10.0" stylesheets="@css/lobby.css">
+      <VBox maxHeight="160.0" spacing="5.0" stylesheets="@css/lobby.css">
          <VBox.margin>
             <Insets left="30.0" right="30.0" top="10.0" />
          </VBox.margin>
@@ -55,9 +55,9 @@
                   <Insets />
                </VBox.margin>
             </HBox>
-            <HBox alignment="CENTER_LEFT" prefHeight="128.0" prefWidth="640.0" spacing="10.0">
+            <HBox alignment="CENTER_LEFT" prefHeight="24.0" prefWidth="620.0" spacing="10.0">
                <children>
-                  <TextField fx:id="ipField" prefHeight="35.0" prefWidth="315.0" promptText="localhost:8080" styleClass="text-input" stylesheets="@css/lobby.css">
+                  <TextField fx:id="ipField" promptText="localhost:8080" styleClass="text-input" stylesheets="@css/lobby.css" HBox.hgrow="ALWAYS">
                      <padding>
                         <Insets bottom="8.0" left="12.0" right="12.0" top="8.0" />
                      </padding>
@@ -65,8 +65,8 @@
                         <Font size="16.0" />
                      </font>
                   </TextField>
-                  <Region prefHeight="44.0" prefWidth="108.0" />
-                  <TextField fx:id="portField" prefHeight="35.0" prefWidth="212.0" promptText="Port" styleClass="text-input" stylesheets="@css/lobby.css">
+                  <Region prefHeight="35.0" prefWidth="13.0" />
+                  <TextField fx:id="portField" prefHeight="35.0" prefWidth="263.0" promptText="Port" styleClass="text-input" stylesheets="@css/lobby.css">
                      <padding>
                         <Insets bottom="8.0" left="12.0" right="12.0" top="8.0" />
                      </padding>
@@ -74,9 +74,21 @@
                         <Font size="16.0" />
                      </font>
                   </TextField>
-                  <Region prefHeight="44.0" prefWidth="108.0" HBox.hgrow="ALWAYS" />
-                  <Button fx:id="connectBtn" maxWidth="250.0" minWidth="100.0" mnemonicParsing="false" prefHeight="44.0" prefWidth="343.0" styleClass="connect-button" stylesheets="@css/lobby.css" text="Připojit se" HBox.hgrow="ALWAYS" />
                </children></HBox>
+            <HBox alignment="CENTER" prefHeight="100.0" prefWidth="200.0">
+               <children>
+                  <TextField fx:id="clientNameField" promptText="Vaše jméno (přihlašovací jméno)" styleClass="text-input" stylesheets="@css/lobby.css" HBox.hgrow="ALWAYS">
+                     <padding>
+                        <Insets bottom="8.0" left="12.0" right="12.0" top="8.0" />
+                     </padding>
+                     <font>
+                        <Font size="16.0" />
+                     </font>
+                  </TextField>
+                  <Region prefHeight="35.0" prefWidth="47.0" />
+                  <Button fx:id="connectBtn" maxWidth="250.0" minHeight="33.0" minWidth="100.0" mnemonicParsing="false" prefHeight="33.0" prefWidth="135.0" styleClass="connect-button" stylesheets="@css/lobby.css" text="Připojit se" HBox.hgrow="ALWAYS" />
+               </children>
+            </HBox>
          </children>
          <padding>
             <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />

@@ -16,4 +16,6 @@ module com.checkerstcp.checkerstcp {
     opens com.checkerstcp.checkerstcp.controller to javafx.fxml;
     exports com.checkerstcp.checkerstcp;
     exports com.checkerstcp.checkerstcp.controller;
+    exports com.checkerstcp.checkerstcp.network;
+    opens com.checkerstcp.checkerstcp.network to javafx.fxml;
 }

@@ -31,8 +31,7 @@
 .connect-button {
     -fx-background-radius: 12;
     -fx-background-insets: 0;
-    -fx-padding: 0 32 0 32;
-    -fx-min-height: 44;
+    -fx-padding: 0 20 0 20;
     -fx-font-size: 16;
     -fx-font-weight: bold;
     -fx-text-fill: white;

@@ -1,6 +1,4 @@
-package com.checkerstcp.checkerstcp;
-
-import com.checkerstcp.checkerstcp.network.OpCode;
+package com.checkerstcp.checkerstcp.network;
 
 public class Message {
     private static final String PREFIX = "DENTCP";

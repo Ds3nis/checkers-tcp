@@ -38,54 +38,81 @@ public class RoomItemController implements Initializable{
     private Label roomStatusLbl;
 
     GameRoom gameRoom;
+    private LobbyController lobbyController;
 
 
     public void setData(GameRoom gameRoom){
         this.gameRoom = gameRoom;
-        this.numOfPlayersLbl.setText(Integer.toString(gameRoom.getNumPlayers()));
+        updateUI();
+    }
+
+    public void setLobbyController(LobbyController lobbyController) {
+        this.lobbyController = lobbyController;
+    }
+
+    private void updateUI() {
+        if (gameRoom == null) return;
+
+        this.numOfPlayersLbl.setText(gameRoom.getNumPlayers() + "/2 " + "hráčů");
         this.roomNumberLbl.setText(gameRoom.getName());
-        setRoomStatus(gameRoom.getRoomStatus());
-    }
+        RoomStatus roomStatus = gameRoom.getRoomStatus();
+        setRoomStatus(roomStatus);
 
-    private void setRoomStatus(RoomStatus roomStatus){
-        if (roomStatus.equals(RoomStatus.WAITING_FOR_PLAYERS)) {
-            roomStatusLbl.getStyleClass().setAll("room-open");
-        } else if (roomStatus.equals(RoomStatus.FULL)) {
-            roomStatusLbl.getStyleClass().setAll("room-full");
-        } else  if (roomStatus.equals(RoomStatus.PLAYING)) {
-            roomStatusLbl.getStyleClass().setAll("room-playing");
+        if (roomStatus == RoomStatus.WAITING_FOR_PLAYERS) {
+            connectToRoomBtn.setText("Připojit se");
+            connectToRoomBtn.setDisable(false);
         }else {
-            throw new IllegalArgumentException("Incorrect room status");
+            connectToRoomBtn.setDisable(true);
         }
     }
 
-    private void handleConnectToRoom(ActionEvent event)  {
-            URL fxmlUrl = Main.class.getResource("game-view.fxml");
-            FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(
-                    fxmlUrl,
-                    "FXML 'roomitem-view.fxml' не знайдено в src/main/resources/com/checkerstcp/checkerstcp/"
-            ));
-        Scene gameScene = null;
-        try {
-            gameScene = new Scene(loader.load());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+    private void setRoomStatus(RoomStatus roomStatus) {
+        roomStatusLbl.getStyleClass().removeAll("room-open", "room-full", "room-playing");
+
+        switch (roomStatus) {
+            case WAITING_FOR_PLAYERS:
+                roomStatusLbl.setText("Očekávání");
+                roomStatusLbl.getStyleClass().add("room-open");
+                break;
+            case FULL:
+                roomStatusLbl.setText("Plná");
+                roomStatusLbl.getStyleClass().add("room-full");
+                break;
+            case PLAYING:
+                roomStatusLbl.setText("Hra běží");
+                roomStatusLbl.getStyleClass().add("room-pending");
+                break;
+            default:
+                throw new IllegalArgumentException("Incorrect room status: " + roomStatus);
+        }
+    }
+
+    private void handleConnectToRoom(ActionEvent event) {
+        if (gameRoom == null) {
+            System.err.println("GameRoom is null");
+            return;
         }
 
-        Stage stage = (Stage) connectToRoomBtn.getScene().getWindow();
-            stage.setScene(gameScene);
-            stage.centerOnScreen();
-            stage.setFullScreen(true);
-            stage.show();
+        if (lobbyController != null) {
+            lobbyController.joinRoom(gameRoom);
+        } else {
+            System.err.println("LobbyController is not set");
+        }
 
-            GameController controller = loader.getController();
-//            controller.initGameRoom(gameRoom);
-
+        // TODO: Після успішного приєднання, перейти до game-view
+        // Це буде оброблятись через ClientManager та його обробники повідомлень
     }
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         connectToRoomBtn.setOnAction(this::handleConnectToRoom);
+
+
+        roomItemCard.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2 && !connectToRoomBtn.isDisable()) {
+                handleConnectToRoom(new ActionEvent());
+            }
+        });
     }
 
 }
