@@ -1,0 +1,42 @@
+.loading .dialog-icon {
+    -fx-background-color: rgba(168, 85, 247, 0.2);
+}
+
+.loading .icon-symbol {
+    -fx-text-fill: #A78BFA;
+}
+
+.loading {
+    /* shadow-[0_0_60px_rgba(168,85,247,0.3)] */
+    -fx-effect: dropshadow(gaussian, rgba(168, 85, 247, 0.3), 30, 0.5, 0, 0);
+}
+
+.loading .progress-indicator {
+    -fx-progress-color: #A78BFA;
+    -fx-pref-width: 32;
+    -fx-pref-height: 32;
+}
+
+.loading .progress-indicator .percentage {
+    -fx-fill: transparent;
+}
+
+.loading-text {
+    -fx-font-size: 14;
+    -fx-text-fill: #95A5B8;
+    -fx-padding: 16 0 0 0;
+}
+
+@keyframes pulse {
+    0%, 100% { -fx-opacity: 1.0; }
+    50% { -fx-opacity: 0.5; }
+}
+
+.loading-text {
+    -fx-animation: pulse 2s infinite;
+}
+
+.btn-confirm,
+.btn-cancel {
+    -fx-transition: all 150ms ease-in-out;
+}

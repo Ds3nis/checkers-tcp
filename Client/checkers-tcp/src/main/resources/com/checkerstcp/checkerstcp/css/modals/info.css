@@ -1,0 +1,20 @@
+.info .dialog-icon {
+    -fx-background-color: rgba(59, 130, 246, 0.2);
+}
+
+.info .icon-symbol {
+    -fx-text-fill: #60A5FA;
+}
+
+.info {
+    /* shadow-[0_0_60px_rgba(59,130,246,0.3)] */
+    -fx-effect: dropshadow(gaussian, rgba(59, 130, 246, 0.3), 30, 0.5, 0, 0);
+}
+
+.info .btn-confirm {
+    -fx-background-color: #2563EB;
+}
+
+.info .btn-confirm:hover {
+    -fx-background-color: #1D4ED8;
+}

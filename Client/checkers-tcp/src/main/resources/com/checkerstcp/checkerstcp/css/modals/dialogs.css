@@ -1,0 +1,80 @@
+.game-dialog {
+    -fx-padding: 32 24 24 24;
+    -fx-alignment: center;
+    -fx-background-radius: 12;
+    -fx-background-color: rgba(28, 32, 40, 0.95);
+    -fx-border-radius: 12;
+    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-border-width: 2;
+    -fx-min-width: 448;
+    -fx-max-width: 448;
+    -fx-spacing: 0;
+}
+
+.dialog-title {
+    -fx-font-size: 20;
+    -fx-font-weight: bold;
+    -fx-text-fill: #F7FAFC;
+    -fx-text-alignment: center;
+    -fx-padding: 16 0 8 0;
+}
+
+.dialog-description {
+    -fx-font-size: 14;
+    -fx-text-fill: #95A5B8;
+    -fx-wrap-text: true;
+    -fx-text-alignment: center;
+    -fx-padding: 0 0 8 0;
+}
+
+.dialog-icon {
+    -fx-background-radius: 999;
+    -fx-pref-width: 64;
+    -fx-pref-height: 64;
+    -fx-min-width: 64;
+    -fx-min-height: 64;
+    -fx-max-width: 64;
+    -fx-max-height: 64;
+    -fx-alignment: center;
+}
+
+
+
+.icon-symbol {
+    -fx-font-size: 32;
+    -fx-font-weight: bold;
+}
+
+.dialog-buttons {
+    -fx-padding: 24 0 0 0;
+    -fx-spacing: 12;
+    -fx-alignment: center;
+}
+
+.btn-confirm,
+.btn-cancel {
+    -fx-cursor: hand;
+    -fx-padding: 10 32;
+    -fx-background-radius: 6;
+    -fx-font-size: 14;
+    -fx-font-weight: 500;
+    -fx-text-fill: white;
+    -fx-border-width: 0;
+    -fx-pref-width: 200;
+}
+
+.btn-cancel {
+    -fx-background-color: transparent;
+    -fx-border-color: #2F353F;
+    -fx-border-width: 1;
+    -fx-text-fill: #F7FAFC;
+}
+
+.btn-cancel:hover {
+    -fx-background-color: rgba(221, 46, 68, 0.1);
+}
+
+.btn-confirm:hover {
+    -fx-opacity: 0.9;
+}
+
