@@ -45,7 +45,9 @@ public class Main extends Application {
             cleanup();
         });
 
+
         stage.show();
+
     }
 
     @Override

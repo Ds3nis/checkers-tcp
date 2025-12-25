@@ -65,8 +65,8 @@
                         <Font size="16.0" />
                      </font>
                   </TextField>
-                  <Region prefHeight="35.0" prefWidth="13.0" />
-                  <TextField fx:id="portField" prefHeight="35.0" prefWidth="263.0" promptText="Port" styleClass="text-input" stylesheets="@css/lobby.css">
+                  <Region prefHeight="35.0" prefWidth="0.0" HBox.hgrow="ALWAYS" />
+                  <TextField fx:id="portField" promptText="Port" styleClass="text-input" stylesheets="@css/lobby.css">
                      <padding>
                         <Insets bottom="8.0" left="12.0" right="12.0" top="8.0" />
                      </padding>
@@ -85,8 +85,8 @@
                         <Font size="16.0" />
                      </font>
                   </TextField>
-                  <Region prefHeight="35.0" prefWidth="47.0" />
-                  <Button fx:id="connectBtn" maxWidth="250.0" minHeight="33.0" minWidth="100.0" mnemonicParsing="false" prefHeight="33.0" prefWidth="135.0" styleClass="connect-button" stylesheets="@css/lobby.css" text="Připojit se" HBox.hgrow="ALWAYS" />
+                  <Region prefHeight="35.0" prefWidth="58.0" HBox.hgrow="ALWAYS" />
+                  <Button fx:id="connectBtn" minHeight="33.0" mnemonicParsing="false" prefHeight="33.0" prefWidth="167.0" styleClass="connect-button" stylesheets="@css/lobby.css" text="Připojit se" HBox.hgrow="ALWAYS" />
                </children>
             </HBox>
          </children>
@@ -129,7 +129,7 @@
                   <Insets left="20.0" right="20.0" />
                </VBox.margin>
                <children>
-                  <ScrollPane fx:id="scrollPane" fitToHeight="true" fitToWidth="true" hbarPolicy="NEVER" prefHeight="200.0" prefWidth="200.0" stylesheets="@css/lobby.css" vbarPolicy="NEVER" VBox.vgrow="ALWAYS" />
+                  <ScrollPane fx:id="scrollPane" fitToHeight="true" fitToWidth="true" hbarPolicy="NEVER" stylesheets="@css/lobby.css" vbarPolicy="NEVER" VBox.vgrow="ALWAYS" />
                </children>
             </VBox>
          </children>

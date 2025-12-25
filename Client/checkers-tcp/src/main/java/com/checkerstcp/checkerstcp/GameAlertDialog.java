@@ -64,7 +64,7 @@ public class GameAlertDialog extends Stage {
         // Buttons
         if (variant != AlertVariant.LOADING) {
             if (showCancel) {
-                Button cancelBtn = new Button("Скасувати");
+                Button cancelBtn = new Button("Zrušit");
                 cancelBtn.getStyleClass().add("btn-cancel");
                 cancelBtn.setOnAction(e -> {
                     if (onCancel != null) onCancel.run();
