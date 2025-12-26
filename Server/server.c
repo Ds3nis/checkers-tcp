@@ -133,7 +133,7 @@ Room* create_room(Server *server, const char *room_name, const char *creator) {
 
     // Check if room already exists
     for (int i = 0; i < MAX_ROOMS; i++) {
-        if (server->rooms[i].players_count > 0 &&
+        if ((server->rooms[i].players_count > 0 || strlen(server->rooms[i].owner) > 0 ) &&
             strcmp(server->rooms[i].name, room_name) == 0) {
             pthread_mutex_unlock(&server->rooms_mutex);
             return NULL;
@@ -163,7 +163,7 @@ Room* create_room(Server *server, const char *room_name, const char *creator) {
 
 Room* find_room(Server *server, const char *room_name) {
     for (int i = 0; i < MAX_ROOMS; i++) {
-        if (server->rooms[i].players_count > 0 &&
+        if ((server->rooms[i].players_count > 0 || strlen(server->rooms[i].owner) > 0)&&
             strcmp(server->rooms[i].name, room_name) == 0) {
             return &server->rooms[i];
         }
@@ -185,12 +185,25 @@ int join_room(Server *server, const char *room_name, const char *player_name) {
         return -2; // Room full
     }
 
-    strncpy(room->player2, player_name, MAX_PLAYER_NAME - 1);
-    room->players_count = 2;
+    if (strcmp(room->player1, player_name) == 0 ||
+        strcmp(room->player2, player_name) == 0) {
+        pthread_mutex_unlock(&server->rooms_mutex);
+        return -3; // Player already in room
+        }
 
-    // Start game
-    init_game(&room->game, room->player1, room->player2);
-    room->game_started = true;
+    if (room->player1[0] == '\0') {
+        strncpy(room->player1, player_name, MAX_PLAYER_NAME - 1);
+        room->player1[MAX_PLAYER_NAME - 1] = '\0';
+        room->players_count = 1;
+    } else if (room->player2[0] == '\0') {
+        strncpy(room->player2, player_name, MAX_PLAYER_NAME - 1);
+        room->player2[MAX_PLAYER_NAME - 1] = '\0';
+        room->players_count = 2;
+
+        // Start game only when second player joins
+        init_game(&room->game, room->player1, room->player2);
+        room->game_started = true;
+    }
 
     pthread_mutex_unlock(&server->rooms_mutex);
     return 0;
@@ -298,7 +311,7 @@ void handle_create_room(Server *server, Client *client, const char *data) {
 
 void handle_join_room(Server *server, Client *client, const char *data) {
     if (!client->logged_in) {
-        send_message(client->socket, OP_ERROR, "Not logged in");
+        send_message(client->socket, OP_ROOM_FAIL, "Not logged in");
         return;
     }
 
@@ -316,19 +329,28 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         send_message(client->socket, OP_ROOM_FAIL, "Room not found");
         return;
     } else if (result == -2) {
-        send_message(client->socket, OP_ROOM_FULL, room_name);
+        send_message(client->socket, OP_ROOM_FAIL, "Room is full");
+        return;
+    } else if (result == -3) {
+        send_message(client->socket, OP_ROOM_FAIL, "You are already in this room");
         return;
     }
 
     strncpy(client->current_room, room_name, MAX_ROOM_NAME - 1);
+    client->current_room[MAX_ROOM_NAME - 1] = '\0';
+
+    Room *room = find_room(server, room_name);
+    if (!room) {
+        send_message(client->socket, OP_ROOM_FAIL, "Room disappeared");
+        return;
+    }
 
     char response[256];
-    snprintf(response, sizeof(response), "%s,2", room_name);
+    snprintf(response, sizeof(response), "%s,%d", room_name, room->players_count);
     send_message(client->socket, OP_ROOM_JOINED, response);
 
-    // Start game
-    Room *room = find_room(server, room_name);
-    if (room && room->game_started) {
+    // Start game only if 2 players joined
+    if (room->game_started) {
         char game_start_msg[512];
         snprintf(game_start_msg, sizeof(game_start_msg), "%s,%s,%s,%s",
                 room_name, room->player1, room->player2, room->game.current_turn);
@@ -337,10 +359,12 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         // Send initial board state
         char *board_json = game_board_to_json(&room->game);
         broadcast_to_room(server, room_name, OP_GAME_STATE, board_json);
+        free(board_json); // Don't forget to free if game_board_to_json allocates memory
     }
 
-    printf("Player %s joined room %s\n", player_name, room_name);
+    printf("Player %s joined room %s (players: %d/2)\n", player_name, room_name, room->players_count);
 }
+
 
 void handle_move(Server *server, Client *client, const char *data) {
     if (!client->logged_in || client->current_room[0] == '\0') {
