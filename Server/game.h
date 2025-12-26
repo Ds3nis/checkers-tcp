@@ -40,6 +40,7 @@ typedef struct {
 // Room structure
 typedef struct {
     char name[MAX_ROOM_NAME];
+    char owner[MAX_ROOM_NAME];
     char player1[MAX_PLAYER_NAME];
     char player2[MAX_PLAYER_NAME];
     int players_count;
