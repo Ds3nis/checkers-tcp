@@ -29,6 +29,9 @@ typedef enum {
     OP_ROOM_LEFT = 15,
     OP_PING = 16,
     OP_PONG = 17,
+    OP_LIST_ROOMS = 18,
+    OP_ROOMS_LIST = 19,
+    OP_ROOM_CREATED = 20,
     OP_ERROR = 500
 } OpCode;
 

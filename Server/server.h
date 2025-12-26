@@ -69,6 +69,7 @@ void handle_join_room(Server *server, Client *client, const char *data);
 void handle_move(Server *server, Client *client, const char *data);
 void handle_leave_room(Server *server, Client *client, const char *data);
 void handle_ping(Server *server, Client *client);
+void handle_list_rooms(Server *server, Client *client);
 
 // Utility functions
 void send_message(int socket, OpCode op, const char *data);

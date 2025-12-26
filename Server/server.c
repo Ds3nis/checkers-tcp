@@ -144,9 +144,11 @@ Room* create_room(Server *server, const char *room_name, const char *creator) {
     for (int i = 0; i < MAX_ROOMS; i++) {
         if (server->rooms[i].players_count == 0) {
             strncpy(server->rooms[i].name, room_name, MAX_ROOM_NAME - 1);
-            strncpy(server->rooms[i].player1, creator, MAX_PLAYER_NAME - 1);
+            strncpy(server->rooms[i].owner, creator, MAX_PLAYER_NAME - 1);
+            server->rooms[i].owner[MAX_PLAYER_NAME - 1] = '\0';
+            server->rooms[i].player1[0] = '\0';
             server->rooms[i].player2[0] = '\0';
-            server->rooms[i].players_count = 1;
+            server->rooms[i].players_count = 0;
             server->rooms[i].game_started = false;
             server->room_count++;
 
@@ -285,10 +287,11 @@ void handle_create_room(Server *server, Client *client, const char *data) {
 
     strncpy(client->current_room, room_name, MAX_ROOM_NAME - 1);
 
-    char response[256];
-    snprintf(response, sizeof(response), "%s,1", room_name);
-    send_message(client->socket, OP_ROOM_JOINED, response);
+    // char response[256];
+    // snprintf(response, sizeof(response), "%s,1", room_name);
+    // send_message(client->socket, OP_ROOM_JOINED, response);
 
+    send_message(client->socket, OP_ROOM_CREATED, room_name);
     printf("Room created: %s by %s. Players count=%d\n", room_name, player_name, room->players_count);
     log_client(client);
 }
@@ -409,6 +412,40 @@ void handle_ping(Server *server, Client *client) {
     printf("PONG TO SOCKET %d\n", client->socket);
 }
 
+void handle_list_rooms(Server *server, Client *client) {
+    pthread_mutex_lock(&server->rooms_mutex);
+
+    // Format: [{"id":1,"name":"Room1","players":1},{"id":2,"name":"Room2","players":2}]
+
+    char json[4096] = "[";
+    int first = 1;
+
+    for (int i = 0; i < MAX_ROOMS; i++) {
+        if (server->rooms[i].players_count > 0) {
+            if (!first) {
+                strcat(json, ",");
+            }
+            first = 0;
+
+            char room_json[256];
+            snprintf(room_json, sizeof(room_json),
+                    "{\"id\":%d,\"name\":\"%s\",\"players\":%d}",
+                    i,
+                    server->rooms[i].name,
+                    server->rooms[i].players_count);
+
+            strcat(json, room_json);
+        }
+    }
+
+    strcat(json, "]");
+
+    pthread_mutex_unlock(&server->rooms_mutex);
+
+    send_message(client->socket, OP_ROOMS_LIST, json);
+    printf("Sent rooms list to client: %s\n", json);
+}
+
 void* client_handler(void *arg) {
     ClientThreadArgs *args = (ClientThreadArgs*)arg;
     Server *server = args->server;
@@ -473,6 +510,9 @@ void* client_handler(void *arg) {
                     break;
                 case OP_PING:
                     handle_ping(server, client);
+                    break;
+                case OP_LIST_ROOMS:
+                    handle_list_rooms(server, client);
                     break;
                 default:
                     send_message(client_socket, OP_ERROR, "Unknown operation");
