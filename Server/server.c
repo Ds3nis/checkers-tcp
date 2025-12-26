@@ -142,7 +142,7 @@ Room* create_room(Server *server, const char *room_name, const char *creator) {
 
     // Find empty slot
     for (int i = 0; i < MAX_ROOMS; i++) {
-        if (server->rooms[i].players_count == 0) {
+        if (server->rooms[i].players_count == 0 && strlen(server->rooms[i].owner) == 0 ) {
             strncpy(server->rooms[i].name, room_name, MAX_ROOM_NAME - 1);
             strncpy(server->rooms[i].owner, creator, MAX_PLAYER_NAME - 1);
             server->rooms[i].owner[MAX_PLAYER_NAME - 1] = '\0';
