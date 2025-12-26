@@ -421,7 +421,7 @@ void handle_list_rooms(Server *server, Client *client) {
     int first = 1;
 
     for (int i = 0; i < MAX_ROOMS; i++) {
-        if (server->rooms[i].players_count > 0) {
+        if (server->rooms[i].players_count > 0 || strlen(server->rooms[i].owner) > 0) {
             if (!first) {
                 strcat(json, ",");
             }
