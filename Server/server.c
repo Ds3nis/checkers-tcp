@@ -341,6 +341,7 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         return;
     } else if (result == -4) {
         send_message(client->socket, OP_ROOM_FAIL, "Already in another room. Leave first.");
+        return;
     }
 
     strncpy(client->current_room, room_name, MAX_ROOM_NAME - 1);
