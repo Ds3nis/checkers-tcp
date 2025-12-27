@@ -185,17 +185,48 @@ int join_room(Server *server, const char *room_name, const char *player_name) {
         return -2; // Room full
     }
 
+    // Check if player is already in this room
     if (strcmp(room->player1, player_name) == 0 ||
         strcmp(room->player2, player_name) == 0) {
         pthread_mutex_unlock(&server->rooms_mutex);
         return -3; // Player already in room
-        }
-
-    Client *client = find_client(server, player_name);
-    if (client->current_room[0] != '\0') {
-        return -4;
     }
 
+    // Check if player is in another room (need to check clients)
+    // UNLOCK rooms_mutex BEFORE locking clients_mutex to avoid deadlock
+    pthread_mutex_unlock(&server->rooms_mutex);
+
+    pthread_mutex_lock(&server->clients_mutex);
+    printf("%s player name \n", player_name);
+    Client *client = find_client(server, player_name);
+    if (!client) {
+        pthread_mutex_unlock(&server->clients_mutex);
+        return -5; // Client not found
+    }
+
+    printf("current room %s \n", client->current_room);
+    if (client->current_room[0] != '\0') {
+        pthread_mutex_unlock(&server->clients_mutex);
+        return -4; // Already in another room
+    }
+    pthread_mutex_unlock(&server->clients_mutex);
+
+    // Re-lock rooms_mutex to modify room
+    pthread_mutex_lock(&server->rooms_mutex);
+
+    // Re-check room still exists and is not full (could have changed)
+    room = find_room(server, room_name);
+    if (!room) {
+        pthread_mutex_unlock(&server->rooms_mutex);
+        return -1;
+    }
+
+    if (room->players_count >= 2) {
+        pthread_mutex_unlock(&server->rooms_mutex);
+        return -2;
+    }
+
+    // Add player to first available slot
     if (room->player1[0] == '\0') {
         strncpy(room->player1, player_name, MAX_PLAYER_NAME - 1);
         room->player1[MAX_PLAYER_NAME - 1] = '\0';
@@ -259,27 +290,46 @@ void broadcast_to_room(Server *server, const char *room_name, OpCode op, const c
 }
 
 void handle_login(Server *server, Client *client, const char *data) {
-    // Check if client_id already exists
     pthread_mutex_lock(&server->clients_mutex);
-    printf("Handling login operation: %s\n", data);
+
+    // Clean input
+    char clean_id[MAX_PLAYER_NAME];
+    strncpy(clean_id, data, MAX_PLAYER_NAME - 1);
+    clean_id[MAX_PLAYER_NAME - 1] = '\0';
+    clean_id[strcspn(clean_id, "\r\n")] = '\0';
+
+    // Validate name length
+    if (strlen(clean_id) == 0) {
+        pthread_mutex_unlock(&server->clients_mutex);
+        send_message(client->socket, OP_LOGIN_FAIL, "Name cannot be empty");
+        printf("Login failed: empty name\n");
+        return;
+    }
+
+    // Check if client_id already exists
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (server->clients[i].active &&
             server->clients[i].logged_in &&
-            strcmp(server->clients[i].client_id, data) == 0) {
+            strcmp(server->clients[i].client_id, clean_id) == 0) {
             pthread_mutex_unlock(&server->clients_mutex);
             send_message(client->socket, OP_LOGIN_FAIL, "Client ID already in use");
+            printf("Login failed: '%s' already in use\n", clean_id);
             return;
-        }
+            }
     }
 
-    strncpy(client->client_id, data, MAX_PLAYER_NAME - 1);
+    // Save client_id
+    strncpy(client->client_id, clean_id, MAX_PLAYER_NAME - 1);
+    client->client_id[MAX_PLAYER_NAME - 1] = '\0';
+
     client->logged_in = true;
+    client->active = true;
 
     pthread_mutex_unlock(&server->clients_mutex);
 
-    send_message(client->socket, OP_LOGIN_OK, data);
+    send_message(client->socket, OP_LOGIN_OK, clean_id);
     log_client(client);
-    printf("Client logged in: %s\n", data);
+    printf("Client logged in: '%s' (socket %d)\n", client->client_id, client->socket);
 }
 
 void handle_create_room(Server *server, Client *client, const char *data) {
@@ -303,7 +353,7 @@ void handle_create_room(Server *server, Client *client, const char *data) {
         return;
     }
 
-    strncpy(client->current_room, room_name, MAX_ROOM_NAME - 1);
+    // strncpy(client->current_room, room_name, MAX_ROOM_NAME - 1);
 
     // char response[256];
     // snprintf(response, sizeof(response), "%s,1", room_name);
@@ -315,6 +365,7 @@ void handle_create_room(Server *server, Client *client, const char *data) {
 }
 
 void handle_join_room(Server *server, Client *client, const char *data) {
+
     if (!client->logged_in) {
         send_message(client->socket, OP_ROOM_FAIL, "Not logged in");
         return;
@@ -328,6 +379,7 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         return;
     }
 
+    printf("before function");
     int result = join_room(server, room_name, player_name);
 
     if (result == -1) {
@@ -341,6 +393,9 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         return;
     } else if (result == -4) {
         send_message(client->socket, OP_ROOM_FAIL, "Already in another room. Leave first.");
+        return;
+    }  else if (result == -5) {
+        send_message(client->socket, OP_ROOM_FAIL, "Client not found");
         return;
     }
 
