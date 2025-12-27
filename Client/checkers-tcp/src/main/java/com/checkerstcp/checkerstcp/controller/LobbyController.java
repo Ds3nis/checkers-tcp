@@ -10,6 +10,7 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -74,10 +75,12 @@ public class LobbyController implements Initializable {
         roomListBox = new VBox(10);
         roomListBox.setFillWidth(true);
         roomListBox.setPadding(new Insets(3, 5, 3, 5));
+        scrollPane.setContent(roomListBox);
         scrollPane.setFitToWidth(true);
-
         createRoomBtn.setDisable(true);
         reloadBtn.setDisable(true);
+
+        updateConnectButtonText(false);
     }
 
     private void bindConnectionState() {
@@ -90,14 +93,32 @@ public class LobbyController implements Initializable {
 
         clientManager.connectedProperty().addListener((obs, oldVal, newVal) -> {
             Platform.runLater(() -> {
-                connectBtn.setDisable(newVal);
+                updateConnectButtonText(newVal);
                 createRoomBtn.setDisable(!newVal);
                 reloadBtn.setDisable(!newVal);
                 ipField.setDisable(newVal);
                 portField.setDisable(newVal);
                 clientNameField.setDisable(newVal);
+
+                if (newVal) {
+                    requestRoomsList();
+                } else {
+                    clearRoomList();
+                }
             });
         });
+    }
+
+    private void updateConnectButtonText(boolean isConnected) {
+        if (isConnected) {
+            connectBtn.setText("Odpojit");
+            connectBtn.getStyleClass().removeAll("connect-button");
+            connectBtn.getStyleClass().add("disconnect-button");
+        } else {
+            connectBtn.setText("Připojit se");
+            connectBtn.getStyleClass().removeAll("disconnect-button");
+            connectBtn.getStyleClass().add("connect-button");
+        }
     }
 
     private void updateConnectionIndicator() {
@@ -116,20 +137,30 @@ public class LobbyController implements Initializable {
         clientManager.registerMessageHandler(OpCode.LOGIN_FAIL, this::handleLoginFail);
 
         clientManager.registerMessageHandler(OpCode.ROOM_JOINED, this::handleRoomJoined);
+        clientManager.registerMessageHandler(OpCode.ROOM_CREATED, this::handleRoomCreated);
 
         clientManager.registerMessageHandler(OpCode.ROOM_FAIL, this::handleRoomFail);
         clientManager.registerMessageHandler(OpCode.ROOM_FULL, this::handleRoomFull);
+        clientManager.registerMessageHandler(OpCode.ROOMS_LIST, this::handleRoomsList);
 
         clientManager.addRoomListUpdateHandler(this::updateRoomList);
     }
 
     private void setupButtonHandlers() {
-        connectBtn.setOnAction(this::handleConnect);
+        connectBtn.setOnAction(this::handleConnectDisconnect);
         createRoomBtn.setOnAction(this::handleCreateRoom);
         reloadBtn.setOnAction(this::handleReload);
     }
 
-    private void handleConnect(ActionEvent event) {
+    private void handleConnectDisconnect(ActionEvent event) {
+        if (clientManager.isConnected()) {
+            handleDisconnect();
+        } else {
+            handleConnect();
+        }
+    }
+
+    private void handleConnect() {
         String host = ipField.getText().trim();
         String portStr = portField.getText().trim();
         String username = clientNameField.getText().trim();
@@ -155,7 +186,6 @@ public class LobbyController implements Initializable {
             return;
         }
 
-        // Спроба підключення
         netStateLbl.setText("Připojování k ...");
 
         new Thread(() -> {
@@ -171,16 +201,17 @@ public class LobbyController implements Initializable {
         }).start();
     }
 
-    private void handleDisconnect(ActionEvent event) {
+    private void handleDisconnect() {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Підтвердження");
-        alert.setHeaderText("Відключення від сервера");
-        alert.setContentText("Ви впевнені, що хочете відключитися?");
+        alert.setTitle("Potvrzení");
+        alert.setHeaderText("Odpojení od serveru");
+        alert.setContentText("Jste si jisti, že se chcete odpojit?");
 
         Optional<ButtonType> result = alert.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
             clientManager.disconnect();
             clearRoomList();
+            netStateLbl.setText("Odpojeno");
         }
     }
 
@@ -213,8 +244,10 @@ public class LobbyController implements Initializable {
             }
 
             clientManager.createRoom(roomName.trim());
+            netStateLbl.setText("Vytváření pokoje...");
         });
     }
+
 
     private void handleReload(ActionEvent event) {
         if (!clientManager.isConnected()) {
@@ -222,35 +255,16 @@ public class LobbyController implements Initializable {
             return;
         }
 
-        // TODO: Коли на сервері буде реалізована операція LIST_ROOMS,
-        // тут буде запит списку кімнат
         netStateLbl.setText("Aktualizace seznamu pokojů...");
+        requestRoomsList();
+    }
 
-        // Поки що просто оновимо існуючий список
-        new Thread(() -> {
-            try {
-                Thread.sleep(500); // Симуляція запиту
-                Platform.runLater(() -> {
-                    updateRoomList(clientManager.getAvailableRooms());
-                    netStateLbl.setText("Список оновлено");
+    private void requestRoomsList() {
+        if (!clientManager.isConnected()) {
+            return;
+        }
 
-                    // Повернути попередній статус через 2 секунди
-                    new Timer().schedule(new TimerTask() {
-                        @Override
-                        public void run() {
-                            Platform.runLater(() -> {
-                                if (clientManager.isConnected()) {
-                                    netStateLbl.setText("Підключено до " +
-                                            ipField.getText() + ":" + portField.getText());
-                                }
-                            });
-                        }
-                    }, 2000);
-                });
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }).start();
+        clientManager.requestRoomsList();
     }
 
 
@@ -268,20 +282,19 @@ public class LobbyController implements Initializable {
 
     private void handleRoomJoined(Message message) {
         Platform.runLater(() -> {
-            // Парсимо room_name,players_count
             String[] parts = message.getData().split(",");
             if (parts.length >= 2) {
                 String roomName = parts[0];
                 int playerCount = Integer.parseInt(parts[1]);
 
                 if (playerCount == 1) {
-                    showInfo("Pokoj vytvořen",
-                            "Pokoj '" + roomName + "' úspěšně vytvořen!\n" +
-                                    "Očekávání druhého hráče...");
+                    showInfo("Pokoj připojen",
+                            "Připojeno k pokoji '" + roomName + "'.\n" +
+                                    "Čekání na druhého hráče...");
+                    requestRoomsList();
                 } else {
-                    // Переходимо до гри
+                    System.out.println("Game starting in room: " + roomName);
                     // TODO: Відкрити game-view
-                    System.out.println("Joining game room: " + roomName);
                 }
             }
         });
@@ -299,25 +312,29 @@ public class LobbyController implements Initializable {
         });
     }
 
+    private void handleRoomsList(Message message) {
+        Platform.runLater(() -> {
+            System.out.println("Received rooms list from server");
+            // ClientManager вже оброблює це повідомлення
+        });
+    }
+
+    private void handleRoomCreated(Message message) {
+        Platform.runLater(() -> {
+            showInfo("Pokoj vytvořen", "Místnost byla úspěšně vytvořena!");
+            requestRoomsList();
+        });
+    }
+
     // ========== Робота зі списком кімнат ==========
 
     private void loadInitialRooms() {
-        List<GameRoom> mockRooms = generateMockRooms();
-        clientManager.updateRoomsList(mockRooms);
+        roomListBox.setAlignment(Pos.CENTER);
+        Label emptyLabel = new Label("Připojte se k serveru pro zobrazení mistnosti");
+        emptyLabel.getStyleClass().add("empty-list-label");
+        roomListBox.getChildren().add(emptyLabel);
     }
 
-    private List<GameRoom> generateMockRooms() {
-        List<GameRoom> rooms = new ArrayList<>();
-        try {
-            // Кілька тестових кімнат
-            rooms.add(new GameRoom(1, "Beginner Room", List.of(new Player("Player1"))));
-            rooms.add(new GameRoom(2, "Pro Arena", List.of(new Player("Master"))));
-            rooms.add(new GameRoom(3, "Quick Game", List.of(new Player("Speed"))));
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return rooms;
-    }
 
     private void updateRoomList(List<GameRoom> rooms) {
         Platform.runLater(() -> {
@@ -343,14 +360,9 @@ public class LobbyController implements Initializable {
                     roomItemController.setData(gameRoom);
                     roomItemController.setLobbyController(this);
 
-                    roomCard.setPrefWidth(scrollPane.getWidth());
-
                     roomCard.setMaxWidth(Double.MAX_VALUE);
-
                     HBox.setHgrow(roomCard, javafx.scene.layout.Priority.ALWAYS);
-                    System.out.println("Scroll " + scrollPane.getWidth());
-                    System.out.println("List: " + roomListBox.getWidth());
-                    System.out.println("List: " + roomCard.getWidth());
+                    roomListBox.setAlignment(Pos.TOP_LEFT);
                     roomListBox.getChildren().add(roomCard);
 
                 } catch (Exception e) {
@@ -358,11 +370,9 @@ public class LobbyController implements Initializable {
                     e.printStackTrace();
                 }
             }
-
-            scrollPane.setFitToWidth(true);
-            scrollPane.setContent(roomListBox);
         });
     }
+
 
     private void clearRoomList() {
         roomListBox.getChildren().clear();
@@ -381,12 +391,13 @@ public class LobbyController implements Initializable {
         }
 
         clientManager.joinRoom(room.getName());
+        netStateLbl.setText("Připojování k pokoji...");
     }
 
     // ========== Допоміжні методи ==========
 
     private void showError(String title, String message) {
-                new GameAlertDialog(
+        new GameAlertDialog(
                 AlertVariant.ERROR,
                 title,
                 message,
@@ -394,19 +405,17 @@ public class LobbyController implements Initializable {
                 null,
                 true
         ).show();
-//        Alert alert = new Alert(Alert.AlertType.ERROR);
-//        alert.setTitle(title);
-//        alert.setHeaderText(null);
-//        alert.setContentText(message);
-//        alert.showAndWait();
     }
 
     private void showInfo(String title, String message) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
+        new GameAlertDialog(
+                AlertVariant.INFO,
+                title,
+                message,
+                null,
+                null,
+                false
+        ).show();
     }
 
 
@@ -414,9 +423,10 @@ public class LobbyController implements Initializable {
         clientManager.unregisterMessageHandler(OpCode.LOGIN_OK);
         clientManager.unregisterMessageHandler(OpCode.LOGIN_FAIL);
         clientManager.unregisterMessageHandler(OpCode.ROOM_JOINED);
+        clientManager.unregisterMessageHandler(OpCode.ROOM_CREATED);
         clientManager.unregisterMessageHandler(OpCode.ROOM_FAIL);
         clientManager.unregisterMessageHandler(OpCode.ROOM_FULL);
+        clientManager.unregisterMessageHandler(OpCode.ROOMS_LIST);
     }
-
 
 }

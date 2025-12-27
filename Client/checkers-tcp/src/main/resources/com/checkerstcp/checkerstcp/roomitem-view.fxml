@@ -9,7 +9,7 @@
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<HBox fx:id="roomItemCard" alignment="CENTER" styleClass="room-card" stylesheets="@css/roomitem.css" xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.checkerstcp.checkerstcp.controller.RoomItemController">
+<HBox fx:id="roomItemCard" alignment="CENTER" minHeight="80.0" styleClass="room-card" stylesheets="@css/roomitem.css" xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.checkerstcp.checkerstcp.controller.RoomItemController">
    <children>
       <VBox alignment="CENTER_LEFT" prefHeight="78.0" prefWidth="277.0">
          <children>

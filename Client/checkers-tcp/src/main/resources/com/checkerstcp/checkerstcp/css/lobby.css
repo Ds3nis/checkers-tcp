@@ -48,11 +48,32 @@
     -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #A52727 0%, #801F1F 100%);
 }
 
+.disconnect-button {
+    -fx-background-radius: 12;
+    -fx-background-insets: 0;
+    -fx-padding: 0 20 0 20;
+    -fx-font-size: 16;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #E03131 0%, #C92A2A 100%);
+    -fx-effect: dropshadow(gaussian, rgba(224,49,49,0.3), 15, 0.3, 0, 0);
+    -fx-cursor: hand;
+}
+
+.disconnect-button:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #C92A2A 0%, #A52727 100%);
+}
+
+.disconnect-button:pressed {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #A52727 0%, #801F1F 100%);
+}
+
 .text-input{
     -fx-prompt-text-fill: #95A5B8;
     -fx-background-radius: 12;
     -fx-background-color: #11151C;
     -fx-font-size: 16;
+    -fx-text-fill: white;
 }
 
 .card-headertxt{
@@ -131,6 +152,26 @@
     -fx-text-fill: #750202;
 }
 
+.status-connected {
+    -fx-text-fill: #28a745;
+    -fx-font-weight: bold;
+}
+
+.status-disconnected {
+    -fx-text-fill: #6c757d;
+}
+
+.status-error {
+    -fx-text-fill: #dc3545;
+}
+
+.empty-list-label {
+    -fx-font-size: 24px;
+    -fx-text-fill: rgba(255, 255, 255, 0.9);
+    -fx-padding: 20px;
+    -fx-wrap-text: true;
+    -fx-alignment: center;
+}
 
 
 .root * {
