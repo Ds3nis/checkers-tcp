@@ -191,6 +191,11 @@ int join_room(Server *server, const char *room_name, const char *player_name) {
         return -3; // Player already in room
         }
 
+    Client *client = find_client(server, player_name);
+    if (client->current_room[0] != '\0') {
+        return -4;
+    }
+
     if (room->player1[0] == '\0') {
         strncpy(room->player1, player_name, MAX_PLAYER_NAME - 1);
         room->player1[MAX_PLAYER_NAME - 1] = '\0';
@@ -334,6 +339,8 @@ void handle_join_room(Server *server, Client *client, const char *data) {
     } else if (result == -3) {
         send_message(client->socket, OP_ROOM_FAIL, "You are already in this room");
         return;
+    } else if (result == -4) {
+        send_message(client->socket, OP_ROOM_FAIL, "Already in another room. Leave first.");
     }
 
     strncpy(client->current_room, room_name, MAX_ROOM_NAME - 1);
