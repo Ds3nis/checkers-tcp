@@ -18,6 +18,9 @@ public enum OpCode {
     ROOM_LEFT(15, "ROOM_LEFT"),
     PING(16, "PING"),
     PONG(17, "PONG"),
+    LIST_ROOMS(18, "LIST_ROOMS"),
+    ROOMS_LIST(19, "ROOMS_LIST"),
+    ROOM_CREATED(20, "ROOM_CREATED"),
     ERROR(500, "ERROR");
 
     private final int code;
