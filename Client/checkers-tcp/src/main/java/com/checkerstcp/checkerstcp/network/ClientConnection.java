@@ -1,8 +1,7 @@
 package com.checkerstcp.checkerstcp.network;
 
 import java.io.*;
-import java.net.Socket;
-import java.net.SocketException;
+import java.net.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Consumer;
@@ -37,7 +36,14 @@ public class ClientConnection {
             this.serverPort = port;
             this.clientId = clientId;
 
-            socket = new Socket(host, port);
+            // Create unconnected socket
+            socket = new Socket();
+
+            // Set connection timeout (5 seconds)
+            SocketAddress endpoint = new InetSocketAddress(host, port);
+            socket.connect(endpoint, 5000);  // 5000ms = 5 seconds
+
+
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
 
@@ -52,6 +58,12 @@ public class ClientConnection {
             System.out.println("Connected to " + host + ":" + port);
 
             return true;
+
+        } catch (SocketTimeoutException e) {
+            System.err.println("Connection timeout: Server not responding");
+            disconnect();
+            return false;
+
         } catch (IOException e) {
             System.err.println("Connection failed: " + e.getMessage());
             disconnect();
@@ -189,6 +201,11 @@ public class ClientConnection {
 
     public void sendPing() {
         Message msg = new Message(OpCode.PING, "");
+        sendMessage(msg);
+    }
+
+    public void sendListRooms() {
+        Message msg = new Message(OpCode.LIST_ROOMS, "");
         sendMessage(msg);
     }
 

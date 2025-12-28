@@ -98,9 +98,6 @@ public class RoomItemController implements Initializable{
         } else {
             System.err.println("LobbyController is not set");
         }
-
-        // TODO: Після успішного приєднання, перейти до game-view
-        // Це буде оброблятись через ClientManager та його обробники повідомлень
     }
 
     @Override
