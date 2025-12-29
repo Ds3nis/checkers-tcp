@@ -265,6 +265,7 @@ void leave_room(Server *server, const char *room_name, const char *player_name) 
             }
 
             if (other) {
+                other->current_room[0] = '\0';
                 char msg[256];
                 snprintf(msg, sizeof(msg), "%s,%s", room_name, player_name);
                 send_message(other->socket, OP_ROOM_LEFT, msg);
@@ -422,7 +423,6 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         // Send initial board state
         char *board_json = game_board_to_json(&room->game);
         broadcast_to_room(server, room_name, OP_GAME_STATE, board_json);
-        free(board_json); // Don't forget to free if game_board_to_json allocates memory
     }
 
     printf("Player %s joined room %s (players: %d/2)\n", player_name, room_name, room->players_count);
