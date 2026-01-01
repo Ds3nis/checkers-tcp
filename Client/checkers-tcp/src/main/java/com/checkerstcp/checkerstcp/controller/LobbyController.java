@@ -52,6 +52,12 @@ public class LobbyController implements Initializable {
 
     private static final int MAX_ROOMS_DISPLAY = 50;
 
+    private String pendingRoomName;
+    private String pendingPlayer1;
+    private String pendingPlayer2;
+    private String pendingFirstTurn;
+    private int[][] pendingBoardState;
+    private boolean waitingForGameState = false;
 
     public LobbyController() {
         clientManager = ClientManager.getInstance();
@@ -67,6 +73,8 @@ public class LobbyController implements Initializable {
         setupMessageHandlers();
 
         setupButtonHandlers();
+
+        restoreConnectionState();
 
         loadInitialRooms();
     }
@@ -109,6 +117,28 @@ public class LobbyController implements Initializable {
         });
     }
 
+    private void restoreConnectionState() {
+        if (clientManager.isConnected()) {
+            System.out.println("Restoring connection state - already connected");
+
+            Platform.runLater(() -> {
+                updateConnectButtonText(true);
+
+                createRoomBtn.setDisable(false);
+                reloadBtn.setDisable(false);
+
+                ipField.setDisable(true);
+                portField.setDisable(true);
+                clientNameField.setDisable(true);
+
+                netStateLbl.setText("Připojeno");
+                updateConnectionIndicator();
+
+                requestRoomsList();
+            });
+        }
+    }
+
     private void updateConnectButtonText(boolean isConnected) {
         if (isConnected) {
             connectBtn.setText("Odpojit");
@@ -142,6 +172,8 @@ public class LobbyController implements Initializable {
         clientManager.registerMessageHandler(OpCode.ROOM_FAIL, this::handleRoomFail);
         clientManager.registerMessageHandler(OpCode.ROOM_FULL, this::handleRoomFull);
         clientManager.registerMessageHandler(OpCode.ROOMS_LIST, this::handleRoomsList);
+        clientManager.registerMessageHandler(OpCode.GAME_START, this::handleGameStart);
+        clientManager.registerMessageHandler(OpCode.GAME_STATE, this::handleGameState);
 
         clientManager.addRoomListUpdateHandler(this::updateRoomList);
     }
@@ -268,6 +300,7 @@ public class LobbyController implements Initializable {
     }
 
 
+
     private void handleLoginOk(Message message) {
         Platform.runLater(() -> {
             showInfo("Úspěch", "Úspěšně připojeno k serveru!");
@@ -294,7 +327,7 @@ public class LobbyController implements Initializable {
                     requestRoomsList();
                 } else {
                     System.out.println("Game starting in room: " + roomName);
-                    // TODO: Відкрити game-view
+                    requestRoomsList();
                 }
             }
         });
@@ -323,6 +356,54 @@ public class LobbyController implements Initializable {
         Platform.runLater(() -> {
             showInfo("Pokoj vytvořen", "Místnost byla úspěšně vytvořena!");
             requestRoomsList();
+        });
+    }
+
+    private void handleGameStart(Message message) {
+        Platform.runLater(() -> {
+            try {
+                String[] parts = message.getData().split(",");
+                if (parts.length >= 4) {
+                    pendingRoomName = parts[0];
+                    pendingPlayer1 = parts[1];
+                    pendingPlayer2 = parts[2];
+                    pendingFirstTurn = parts[3];
+
+                    waitingForGameState = true;
+
+                    System.out.println("GAME_START received, waiting for GAME_STATE...");
+                    System.out.println("  Room: " + pendingRoomName);
+                    System.out.println("  Player1 (WHITE): " + pendingPlayer1);
+                    System.out.println("  Player2 (BLACK): " + pendingPlayer2);
+                    System.out.println("  First turn: " + pendingFirstTurn);
+                }
+            } catch (Exception e) {
+                System.err.println("Error handling GAME_START: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
+    }
+
+    private void handleGameState(Message message) {
+        Platform.runLater(() -> {
+            try {
+                if (waitingForGameState) {
+                    String jsonData = message.getData();
+                    System.out.println("GAME_STATE received: " + jsonData);
+
+                    pendingBoardState = GameStateParser.parseBoardFromJson(jsonData);
+
+                    openGameView(pendingRoomName, pendingPlayer1, pendingPlayer2,
+                            pendingFirstTurn, pendingBoardState);
+
+                    waitingForGameState = false;
+                    pendingBoardState = null;
+                }
+            } catch (Exception e) {
+                System.err.println("Error handling GAME_STATE in lobby: " + e.getMessage());
+                e.printStackTrace();
+                waitingForGameState = false;
+            }
         });
     }
 
@@ -427,6 +508,62 @@ public class LobbyController implements Initializable {
         clientManager.unregisterMessageHandler(OpCode.ROOM_FAIL);
         clientManager.unregisterMessageHandler(OpCode.ROOM_FULL);
         clientManager.unregisterMessageHandler(OpCode.ROOMS_LIST);
+        clientManager.unregisterMessageHandler(OpCode.GAME_START);
     }
+
+    private void openGameView(String roomName, String player1, String player2,
+                              String firstTurn, int[][] initialBoardState) {
+        try {
+            System.out.println("Opening game view for room: " + roomName);
+
+            URL fxmlUrl = Main.class.getResource("game-view.fxml");
+            if (fxmlUrl == null) {
+                showError("Chyba", "FXML 'game-view.fxml' nebyl nalezen");
+                return;
+            }
+
+            FXMLLoader loader = new FXMLLoader(fxmlUrl);
+            javafx.scene.Parent root = loader.load();
+            javafx.scene.Scene gameScene = new javafx.scene.Scene(root);
+
+            GameController gameController = loader.getController();
+
+            String myName = clientManager.getCurrentClientId();
+            PieceColor myColor;
+            String opponent;
+
+            if (myName.equals(player1)) {
+                myColor = PieceColor.WHITE;
+                opponent = player2;
+            } else {
+                myColor = PieceColor.BLACK;
+                opponent = player1;
+            }
+
+            boolean myTurn = firstTurn.equals(myName);
+
+            System.out.println("My name: " + myName);
+            System.out.println("My color: " + myColor);
+            System.out.println("Opponent: " + opponent);
+            System.out.println("My turn: " + myTurn);
+
+
+            gameController.initGame(roomName, opponent, myColor, myTurn, initialBoardState);
+
+            javafx.stage.Stage stage = (javafx.stage.Stage) connectBtn.getScene().getWindow();
+            stage.setScene(gameScene);
+            stage.centerOnScreen();
+
+            cleanup();
+
+            System.out.println("Successfully switched to game view");
+
+        } catch (Exception e) {
+            System.err.println("Error opening game view: " + e.getMessage());
+            e.printStackTrace();
+            showError("Chyba", "Nepodařilo se otevřít herní obrazovku: " + e.getMessage());
+        }
+    }
+
 
 }
