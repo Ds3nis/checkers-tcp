@@ -22,12 +22,7 @@
         </HBox>
         <HBox alignment="CENTER_LEFT" styleClass="player-color" stylesheets="@css/playerinfopanel.css">
             <children>
-            <Label>
-               <styleClass>
-                  <String fx:value="piece-preview" />
-                  <String fx:value="red-piece" />
-               </styleClass>
-            </Label>
+            <Label fx:id="pieceColorLbl" styleClass="piece-preview" />
                 <Label fx:id="pieceColorNamelbl" styleClass="piece-color-name" text="Červené" />
             </children>
         </HBox>
@@ -36,7 +31,7 @@
                 <Label fx:id="numOfPiecesLbl" styleClass="piece-count" text="12 dam" />
             </children>
         </HBox>
-        <VBox spacing="5.0" VBox.vgrow="ALWAYS">
+        <VBox fx:id="movesCard" spacing="5.0" VBox.vgrow="ALWAYS">
             <children>
                 <Label fx:id="playerMovesLbl" styleClass="moves-title" text="Jeho kroky" VBox.vgrow="ALWAYS" />
                 <ScrollPane fx:id="playerScrollMoves" hbarPolicy="NEVER" vbarPolicy="NEVER" VBox.vgrow="ALWAYS">

@@ -253,7 +253,7 @@ public class LobbyController implements Initializable {
             return;
         }
 
-        TextInputDialog dialog = new TextInputDialog("Room " + (new Random().nextInt(100)));
+        TextInputDialog dialog = new TextInputDialog("Room_" + (new Random().nextInt(100)));
         dialog.setTitle("Vytvořit pokoj");
         dialog.setHeaderText("Vytvoření nové herny");
         dialog.setContentText("Název pokoje:");
