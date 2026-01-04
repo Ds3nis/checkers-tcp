@@ -380,7 +380,6 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         return;
     }
 
-    printf("before function");
     int result = join_room(server, room_name, player_name);
 
     if (result == -1) {
@@ -452,6 +451,7 @@ void handle_move(Server *server, Client *client, const char *data) {
         return;
     }
 
+    print_board(&room->game);
     // Validate move
     if (!validate_move(&room->game, from_row, from_col, to_row, to_col, player_name)) {
         send_message(client->socket, OP_INVALID_MOVE, "Invalid move");
@@ -539,11 +539,14 @@ void* client_handler(void *arg) {
     int client_socket = args->client_socket;
     int client_idx = args->client_idx;
 
-    printf("Handling client connection from client socket %d", client_socket);
+    printf("Handling client connection from client socket %d\n", client_socket);
 
     free(args);
 
-    char buffer[BUFFER_SIZE];
+    char recv_buffer[BUFFER_SIZE];           // Буфер для recv()
+    char message_buffer[BUFFER_SIZE * 2];    // Буфер для накопичення повідомлення
+    int message_pos = 0;                     // Позиція в буфері накопичення
+
     Client *client = NULL;
 
     // Find client structure
@@ -561,49 +564,68 @@ void* client_handler(void *arg) {
         return NULL;
     }
 
+    memset(message_buffer, 0, sizeof(message_buffer));
+
     while (server->running && client->active) {
-        memset(buffer, 0, BUFFER_SIZE);
-        int bytes = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+        memset(recv_buffer, 0, BUFFER_SIZE);
+        int bytes = recv(client_socket, recv_buffer, BUFFER_SIZE - 1, 0);
 
         if (bytes <= 0) {
             break;
         }
 
-        buffer[bytes] = '\0';
+        for (int i = 0; i < bytes; i++) {
+            char current_char = recv_buffer[i];
 
-        // Remove newline
-        char *newline = strchr(buffer, '\n');
-        if (newline) *newline = '\0';
+            if (message_pos >= sizeof(message_buffer) - 1) {
+                fprintf(stderr, "Message buffer overflow, resetting\n");
+                message_pos = 0;
+                memset(message_buffer, 0, sizeof(message_buffer));
+                continue;
+            }
 
-        Message msg;
-        if (parse_message(buffer, &msg) == 0) {
-            log_message("RECV", &msg);
+            message_buffer[message_pos++] = current_char;
 
-            switch (msg.op) {
-                case OP_LOGIN:
-                    handle_login(server, client, msg.data);
-                    break;
-                case OP_CREATE_ROOM:
-                    handle_create_room(server, client, msg.data);
-                    break;
-                case OP_JOIN_ROOM:
-                    handle_join_room(server, client, msg.data);
-                    break;
-                case OP_MOVE:
-                    handle_move(server, client, msg.data);
-                    break;
-                case OP_LEAVE_ROOM:
-                    handle_leave_room(server, client, msg.data);
-                    break;
-                case OP_PING:
-                    handle_ping(server, client);
-                    break;
-                case OP_LIST_ROOMS:
-                    handle_list_rooms(server, client);
-                    break;
-                default:
-                    send_message(client_socket, OP_ERROR, "Unknown operation");
-                    break;
+            if (current_char == '\n') {
+                // Замінюємо '\n' на '\0'
+                message_buffer[message_pos - 1] = '\0';
+
+                Message msg;
+                if (parse_message(message_buffer, &msg) == 0) {
+                    log_message("RECV", &msg);
+
+                    switch (msg.op) {
+                        case OP_LOGIN:
+                            handle_login(server, client, msg.data);
+                            break;
+                        case OP_CREATE_ROOM:
+                            handle_create_room(server, client, msg.data);
+                            break;
+                        case OP_JOIN_ROOM:
+                            handle_join_room(server, client, msg.data);
+                            break;
+                        case OP_MOVE:
+                            handle_move(server, client, msg.data);
+                            break;
+                        case OP_LEAVE_ROOM:
+                            handle_leave_room(server, client, msg.data);
+                            break;
+                        case OP_PING:
+                            handle_ping(server, client);
+                            break;
+                        case OP_LIST_ROOMS:
+                            handle_list_rooms(server, client);
+                            break;
+                        default:
+                            send_message(client_socket, OP_ERROR, "Unknown operation");
+                            break;
+                    }
+                } else {
+                    fprintf(stderr, "Failed to parse message: %s\n", message_buffer);
+                }
+
+                message_pos = 0;
+                memset(message_buffer, 0, sizeof(message_buffer));
             }
         }
     }
