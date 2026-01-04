@@ -4,6 +4,8 @@ import java.io.*;
 import java.net.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public class ClientConnection {
@@ -22,6 +24,12 @@ public class ClientConnection {
     private int serverPort;
     private String clientId;
 
+    // Захист від спаму: лічильник однакових повідомлень
+    private final ConcurrentHashMap<Integer, AtomicInteger> messageCounters = new ConcurrentHashMap<>();
+    private static final int MAX_DUPLICATE_MESSAGES = 10; // Максимум однакових повідомлень
+    private static final long COUNTER_RESET_INTERVAL = 5000; // Скидати лічильники кожні 5 секунд
+    private long lastCounterReset = System.currentTimeMillis();
+
     public ClientConnection() {
     }
 
@@ -36,13 +44,10 @@ public class ClientConnection {
             this.serverPort = port;
             this.clientId = clientId;
 
-            // Create unconnected socket
             socket = new Socket();
 
-            // Set connection timeout (5 seconds)
             SocketAddress endpoint = new InetSocketAddress(host, port);
-            socket.connect(endpoint, 5000);  // 5000ms = 5 seconds
-
+            socket.connect(endpoint, 5000);
 
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
@@ -71,9 +76,6 @@ public class ClientConnection {
         }
     }
 
-    /**
-     * Відключення від сервера
-     */
     public synchronized void disconnect() {
         if (!connected) {
             return;
@@ -107,22 +109,47 @@ public class ClientConnection {
 
     private void startListenerThread() {
         listenerThread = new Thread(() -> {
+            StringBuilder messageBuffer = new StringBuilder();
+            char[] buffer = new char[1024];
+
             try {
-                String line;
-                while (connected && (line = in.readLine()) != null) {
-                    try {
-                        Message message = Message.parse(line);
-                        if (message != null && messageHandler != null) {
-                            messageHandler.accept(message);
+                while (connected) {
+                    int charsRead = in.read(buffer, 0, buffer.length);
+
+                    if (charsRead == -1) {
+                        System.out.println("Server closed connection");
+                        break;
+                    }
+
+                    for (int i = 0; i < charsRead; i++) {
+                        char currentChar = buffer[i];
+
+                        if (messageBuffer.length() >= 8192) {
+                            System.err.println("Message buffer overflow, resetting");
+                            messageBuffer.setLength(0);
+                            continue;
                         }
-                    } catch (Exception e) {
-                        System.err.println("Error parsing message: " + e.getMessage());
+
+                        messageBuffer.append(currentChar);
+
+                        if (currentChar == '\n') {
+                            String messageStr = messageBuffer.toString().trim();
+                            messageBuffer.setLength(0);
+
+                            if (!messageStr.isEmpty()) {
+                                processMessage(messageStr);
+                            }
+                        }
                     }
                 }
             } catch (SocketException e) {
-                System.out.println("Socket closed");
+                if (connected) {
+                    System.err.println("Socket closed unexpectedly");
+                }
             } catch (IOException e) {
-                System.err.println("Connection lost: " + e.getMessage());
+                if (connected) {
+                    System.err.println("Connection lost: " + e.getMessage());
+                }
             } finally {
                 disconnect();
             }
@@ -132,6 +159,59 @@ public class ClientConnection {
         listenerThread.start();
     }
 
+
+    private void processMessage(String messageStr) {
+        try {
+            Message message = Message.parse(messageStr);
+
+            if (message == null) {
+                System.err.println("Failed to parse message: " + messageStr);
+                return;
+            }
+
+            if (!checkMessageSpam(message)) {
+                System.err.println("Too many duplicate messages, ignoring: " + message.getOpCode());
+                return;
+            }
+
+            if (messageHandler != null) {
+                messageHandler.accept(message);
+            }
+
+        } catch (Exception e) {
+            System.err.println("Error processing message: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private boolean checkMessageSpam(Message message) {
+        long now = System.currentTimeMillis();
+        if (now - lastCounterReset > COUNTER_RESET_INTERVAL) {
+            messageCounters.clear();
+            lastCounterReset = now;
+        }
+
+        int messageKey = message.getOpCode().hashCode();
+
+        AtomicInteger counter = messageCounters.computeIfAbsent(
+                messageKey,
+                k -> new AtomicInteger(0)
+        );
+
+        int count = counter.incrementAndGet();
+
+
+        if (count > MAX_DUPLICATE_MESSAGES) {
+            if (count == MAX_DUPLICATE_MESSAGES + 1) {
+                System.err.println("⚠️ Spam detected: " + message.getOpCode() +
+                        " received " + count + " times in " +
+                        COUNTER_RESET_INTERVAL + "ms");
+            }
+            return false;
+        }
+
+        return true;
+    }
 
     private void startSenderThread() {
         senderThread = new Thread(() -> {
@@ -151,7 +231,6 @@ public class ClientConnection {
         senderThread.setName("MessageSender");
         senderThread.start();
     }
-
 
     private void sendMessage(Message message) {
         if (!connected) {
@@ -238,5 +317,13 @@ public class ClientConnection {
             return serverHost + ":" + serverPort;
         }
         return "Not connected";
+    }
+
+    public String getMessageStats() {
+        StringBuilder stats = new StringBuilder("Message statistics:\n");
+        messageCounters.forEach((key, counter) -> {
+            stats.append(String.format("  Key %d: %d messages\n", key, counter.get()));
+        });
+        return stats.toString();
     }
 }
