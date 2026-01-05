@@ -66,12 +66,14 @@ void remove_room(Server *server, const char *room_name);
 void handle_login(Server *server, Client *client, const char *data);
 void handle_create_room(Server *server, Client *client, const char *data);
 void handle_join_room(Server *server, Client *client, const char *data);
+void handle_multi_move(Server *server, Client *client, const char *data);
 void handle_move(Server *server, Client *client, const char *data);
 void handle_leave_room(Server *server, Client *client, const char *data);
 void handle_ping(Server *server, Client *client);
 void handle_list_rooms(Server *server, Client *client);
 
 // Utility functions
+void cleanup_finished_game(Server *server, Room *room);
 void send_message(int socket, OpCode op, const char *data);
 void broadcast_to_room(Server *server, const char *room_name, OpCode op, const char *data);
 

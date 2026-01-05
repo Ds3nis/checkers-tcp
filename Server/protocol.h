@@ -32,6 +32,7 @@ typedef enum {
     OP_LIST_ROOMS = 18,
     OP_ROOMS_LIST = 19,
     OP_ROOM_CREATED = 20,
+    OP_MULTI_MOVE = 21,
     OP_ERROR = 500
 } OpCode;
 
@@ -46,7 +47,5 @@ typedef struct {
 int parse_message(const char *buffer, Message *msg);
 int create_message(char *buffer, OpCode op, const char *data);
 void log_message(const char *prefix, const Message *msg);
-
-
 
 #endif //SERVER_PROTOCOL_H

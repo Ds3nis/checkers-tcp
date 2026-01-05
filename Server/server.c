@@ -600,11 +600,10 @@ void cleanup_finished_game(Server *server, Room *room) {
     }
     pthread_mutex_unlock(&server->clients_mutex);
 
-    room->game_started = false;
-    room->player1[0] = '\0';
-    room->player2[0] = '\0';
-    room->players_count = 0;
-    room->owner[0] = '\0';
+    pthread_mutex_lock(&server->rooms_mutex);
+    memset(room, 0, sizeof(Room));
+    server->room_count --;
+    pthread_mutex_unlock(&server->rooms_mutex);
 
 
     printf("✅ Room %s cleaned up\n", room->name);
