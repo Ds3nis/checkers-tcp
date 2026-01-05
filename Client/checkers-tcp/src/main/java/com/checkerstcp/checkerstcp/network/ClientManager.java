@@ -3,6 +3,7 @@ package com.checkerstcp.checkerstcp.network;
 
 import com.checkerstcp.checkerstcp.GameRoom;
 import com.checkerstcp.checkerstcp.Player;
+import com.checkerstcp.checkerstcp.Position;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -305,6 +306,20 @@ public class ClientManager {
             return;
         }
         connection.sendMove(currentRoom, currentClientId, fromRow, fromCol, toRow, toCol);
+    }
+
+    public void sendMultiMove(List<Position> path){
+        if (!connection.isConnected() || currentRoom == null) {
+            System.err.println("Not in a game");
+            return;
+        }
+
+        if (path == null || path.size() < 2) {
+            System.err.println("Invalid path: need at least 2 positions");
+            return;
+        }
+
+        connection.sendMultiMove(currentRoom, currentClientId, path);
     }
 
     public void ping() {

@@ -472,9 +472,144 @@ void handle_move(Server *server, Client *client, const char *data) {
         char end_msg[256];
         snprintf(end_msg, sizeof(end_msg), "%s,no_pieces", winner);
         broadcast_to_room(server, room_name, OP_GAME_END, end_msg);
-        room->game_started = false;
+        cleanup_finished_game(server, room);
+        printf("🏆 Game over! Winner: %s\n", winner);
     }
 }
+
+void handle_multi_move(Server *server, Client *client, const char *data) {
+    if (!client->logged_in || client->current_room[0] == '\0') {
+        send_message(client->socket, OP_ERROR, "Not in a game");
+        return;
+    }
+
+    printf("\n=== HANDLE MULTI MOVE ===\n");
+    printf("Data: %s\n", data);
+
+    // Parse: room_name,player_name,path_length,r1,c1,r2,c2,...
+    char room_name[MAX_ROOM_NAME];
+    char player_name[MAX_PLAYER_NAME];
+    int path_length;
+
+    // Парсити перші 3 поля
+    int parsed = sscanf(data, "%[^,],%[^,],%d", room_name, player_name, &path_length);
+
+    if (parsed != 3 || path_length < 2 || path_length > 20) {
+        send_message(client->socket, OP_INVALID_MOVE, "Invalid multi-move format");
+        printf("❌ Parse error: parsed=%d, path_length=%d\n", parsed, path_length);
+        return;
+    }
+
+    printf("Room: %s, Player: %s, Path length: %d\n", room_name, player_name, path_length);
+
+    Room *room = find_room(server, room_name);
+    if (!room || !room->game_started) {
+        send_message(client->socket, OP_ERROR, "Game not found");
+        return;
+    }
+
+    int path[20][2]; // Максимум 20 позицій
+    const char *ptr = data;
+
+    // Пропустити перші 3 поля
+    for (int i = 0; i < 3; i++) {
+        ptr = strchr(ptr, ',');
+        if (!ptr) {
+            send_message(client->socket, OP_INVALID_MOVE, "Invalid path data");
+            return;
+        }
+        ptr++; // Пропустити кому
+    }
+
+    // Парсити координати
+    for (int i = 0; i < path_length; i++) {
+        if (sscanf(ptr, "%d,%d", &path[i][0], &path[i][1]) != 2) {
+            send_message(client->socket, OP_INVALID_MOVE, "Invalid coordinates");
+            printf("❌ Failed to parse position %d\n", i);
+            return;
+        }
+
+        printf("  Position %d: (%d, %d)\n", i, path[i][0], path[i][1]);
+
+        // Перейти до наступної пари
+        ptr = strchr(ptr, ',');
+        if (ptr) ptr++;
+        ptr = strchr(ptr, ',');
+        if (ptr && i < path_length - 1) ptr++;
+    }
+
+    // Валідувати та застосувати ланцюжок ходів
+    printf("\n=== VALIDATING MULTI-MOVE CHAIN ===\n");
+
+    for (int i = 0; i < path_length - 1; i++) {
+        int from_row = path[i][0];
+        int from_col = path[i][1];
+        int to_row = path[i + 1][0];
+        int to_col = path[i + 1][1];
+
+        printf("Step %d: (%d,%d) -> (%d,%d)\n", i + 1, from_row, from_col, to_row, to_col);
+
+        print_board(&room->game);
+        if (!validate_move(&room->game, from_row, from_col, to_row, to_col, player_name)) {
+            send_message(client->socket, OP_INVALID_MOVE, "Invalid move in chain");
+            printf("❌ Step %d failed validation\n", i + 1);
+            return;
+        }
+
+        // Застосувати крок
+        apply_move(&room->game, from_row, from_col, to_row, to_col);
+        printf("✅ Step %d applied\n", i + 1);
+    }
+
+    printf("=== MULTI-MOVE CHAIN COMPLETED ===\n\n");
+
+    // Змінити хід
+    change_turn(&room->game);
+
+    // Відправити оновлену дошку
+    char *board_json = game_board_to_json(&room->game);
+    broadcast_to_room(server, room_name, OP_GAME_STATE, board_json);
+
+    // Перевірити кінець гри
+    char winner[MAX_PLAYER_NAME];
+    if (check_game_over(&room->game, winner)) {
+        char end_msg[256];
+        snprintf(end_msg, sizeof(end_msg), "%s,no_pieces", winner);
+        broadcast_to_room(server, room_name, OP_GAME_END, end_msg);
+        cleanup_finished_game(server, room);
+        printf("🏆 Game over! Winner: %s\n", winner);
+    }
+}
+
+void cleanup_finished_game(Server *server, Room *room) {
+    printf("🧹 Cleaning up finished game in room: %s\n", room->name);
+
+    // 1. Відвʼязати всіх гравців від кімнати
+    pthread_mutex_lock(&server->clients_mutex);
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (server->clients[i].active &&
+            strcmp(server->clients[i].current_room, room->name) == 0) {
+
+            Client *client = &server->clients[i];
+            printf("  Removing player %s from room\n", client->client_id);
+
+            client->current_room[0] = '\0';
+
+            send_message(client->socket, OP_ROOM_LEFT, room->name);
+            }
+    }
+    pthread_mutex_unlock(&server->clients_mutex);
+
+    room->game_started = false;
+    room->player1[0] = '\0';
+    room->player2[0] = '\0';
+    room->players_count = 0;
+    room->owner[0] = '\0';
+
+
+    printf("✅ Room %s cleaned up\n", room->name);
+}
+
 
 void handle_leave_room(Server *server, Client *client, const char *data) {
     char room_name[MAX_ROOM_NAME];
@@ -606,6 +741,9 @@ void* client_handler(void *arg) {
                             break;
                         case OP_MOVE:
                             handle_move(server, client, msg.data);
+                            break;
+                        case OP_MULTI_MOVE:
+                            handle_multi_move(server, client, msg.data);
                             break;
                         case OP_LEAVE_ROOM:
                             handle_leave_room(server, client, msg.data);

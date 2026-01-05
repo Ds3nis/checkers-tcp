@@ -1,32 +1,18 @@
 package com.checkerstcp.checkerstcp;
 
 public class GameInfoPanel {
-
-    private boolean isRight;
-    private boolean isLeft;
-
     private String playerName;
     private PieceColor pieceColor;
     private int numOfPieces;
     private String status;
     private boolean isCurrentPlayer;
 
-    public GameInfoPanel(boolean isLeft, boolean isRight){
-        this.isLeft = isLeft;
-        this.isRight = isRight;
+    public GameInfoPanel(){
         this.playerName = "";
         this.pieceColor = null;
         this.numOfPieces = 0;
         this.status = "Čekání...";
         this.isCurrentPlayer = false;
-    }
-
-    public boolean isRight() {
-        return isRight;
-    }
-
-    public boolean isLeft() {
-        return isLeft;
     }
 
     public String getPlayerName() {

@@ -21,6 +21,7 @@ public enum OpCode {
     LIST_ROOMS(18, "LIST_ROOMS"),
     ROOMS_LIST(19, "ROOMS_LIST"),
     ROOM_CREATED(20, "ROOM_CREATED"),
+    MULTI_MOVE(21, "MULTI_MOVE"),
     ERROR(500, "ERROR");
 
     private final int code;

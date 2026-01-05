@@ -11,6 +11,7 @@ public class Move {
     private final MoveType type;
     private final List<Position> capturedPositions;
     private final boolean promotesToKing;
+    private final List<Position> path;
 
     public Move(int fromRow, int fromCol, int toRow, int toCol) {
         this(fromRow, fromCol, toRow, toCol, MoveType.NORMAL, false);
@@ -24,6 +25,7 @@ public class Move {
         this.type = type;
         this.capturedPositions = new ArrayList<>();
         this.promotesToKing = promotesToKing;
+        this.path = new ArrayList<>();
     }
 
     /**
@@ -33,27 +35,28 @@ public class Move {
         capturedPositions.add(new Position(row, col));
     }
 
-    /**
-     * Чи є хід захопленням (стрибок)
-     */
+    public void addPathPosition(int row, int col) {
+        path.add(new Position(row, col));
+    }
+
+
     public boolean isCapture() {
-        return type == MoveType.CAPTURE || !capturedPositions.isEmpty();
+        return type == MoveType.CAPTURE || type == MoveType.MULTI_CAPTURE;
+    }
+
+    public boolean isMultiCapture() {
+        return type == MoveType.MULTI_CAPTURE;
     }
 
     /**
      * Отримати позицію захопленої шашки (для простого стрибка)
      */
     public Position getCapturedPosition() {
-        if (isCapture() && !capturedPositions.isEmpty()) {
-            return capturedPositions.get(0);
-        }
-        // Для простого стрибка - середина між from і to
-        if (Math.abs(toRow - fromRow) == 2) {
-            int midRow = (fromRow + toRow) / 2;
-            int midCol = (fromCol + toCol) / 2;
-            return new Position(midRow, midCol);
-        }
-        return null;
+        return capturedPositions.isEmpty() ? null : capturedPositions.get(0);
+    }
+
+    public List<Position> getPath() {
+        return path;
     }
 
     /**
@@ -94,9 +97,8 @@ public class Move {
 
     @Override
     public String toString() {
-        return String.format("Move[(%d,%d)->(%d,%d) %s%s]",
-                fromRow, fromCol, toRow, toCol, type,
-                promotesToKing ? " +KING" : "");
+        return String.format("Move(%d,%d → %d,%d, %s, captures=%d)",
+                fromRow, fromCol, toRow, toCol, type, capturedPositions.size());
     }
 
     @Override

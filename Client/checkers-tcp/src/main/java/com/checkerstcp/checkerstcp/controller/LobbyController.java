@@ -551,6 +551,7 @@ public class LobbyController implements Initializable {
             gameController.initGame(roomName, opponent, myColor, myTurn, initialBoardState);
 
             javafx.stage.Stage stage = (javafx.stage.Stage) connectBtn.getScene().getWindow();
+            stage.setFullScreen(true);
             stage.setScene(gameScene);
             stage.centerOnScreen();
 

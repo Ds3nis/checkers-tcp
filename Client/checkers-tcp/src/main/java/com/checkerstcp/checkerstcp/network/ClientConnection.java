@@ -1,7 +1,10 @@
 package com.checkerstcp.checkerstcp.network;
 
+import com.checkerstcp.checkerstcp.Position;
+
 import java.io.*;
 import java.net.*;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -288,7 +291,19 @@ public class ClientConnection {
         sendMessage(msg);
     }
 
-    // ========== Геттери та сеттери ==========
+    public void sendMultiMove(String roomName, String playerName, List<Position> path) {
+        StringBuilder data = new StringBuilder();
+        data.append(roomName).append(",");
+        data.append(playerName).append(",");
+        data.append(path.size());
+
+        for (Position pos : path) {
+            data.append(",").append(pos.getRow()).append(",").append(pos.getCol());
+        }
+
+        Message msg = new Message(OpCode.MULTI_MOVE, data.toString());
+        sendMessage(msg);
+    }
 
     public boolean isConnected() {
         return connected && socket != null && !socket.isClosed();
