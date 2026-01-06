@@ -13,6 +13,7 @@ import javafx.util.Duration;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class CheckersBoard extends GridPane {
     private static final int SIZE = 8;
@@ -30,6 +31,7 @@ public class CheckersBoard extends GridPane {
     private SelectionCallback onPieceSelected;
     private boolean animating = false;
     private Runnable onAnimationFinished;
+    private PieceColor myColor;
 
 
     public CheckersBoard() {
@@ -199,7 +201,7 @@ public class CheckersBoard extends GridPane {
      * Чи можна вибрати цю шашку
      */
     private boolean canSelectPiece(Piece piece) {
-        return piece != null && piece.getColor() == currentTurn;
+        return piece != null && (piece.getColor() == currentTurn && piece.getColor() == myColor);
     }
 
     /**
@@ -315,7 +317,6 @@ public class CheckersBoard extends GridPane {
      */
     public void executeMove(Move move) {
         if (animating) return;
-
         animating = true;
 
         Piece piece = pieces[move.getFromRow()][move.getFromCol()];
@@ -325,28 +326,26 @@ public class CheckersBoard extends GridPane {
         }
 
         animateMove(move, () -> {
-
+            // Видалити всі з'їдені шашки
             if (move.isCapture()) {
-                Position captured = move.getCapturedPosition();
-                if (captured != null) {
+                for (Position captured : move.getCapturedPositions()) {
                     removePiece(captured.getRow(), captured.getCol());
                 }
             }
 
+            // Промоція в дамку
             if (move.promotesToKing()) {
                 piece.promoteToKing();
             }
 
             currentTurn = currentTurn.opposite();
             deselectPiece();
-
             animating = false;
 
             if (onAnimationFinished != null) {
                 onAnimationFinished.run();
             }
         });
-
     }
 
 
@@ -405,36 +404,204 @@ public class CheckersBoard extends GridPane {
         }
     }
 
-    /**
-     * Отримати валідні ходи для шашки
-     */
     private List<Move> getValidMovesForPiece(Piece piece) {
         List<Move> moves = new ArrayList<>();
         int row = piece.getRow();
         int col = piece.getCol();
 
-        // ✅ Визначити напрямок руху на основі позиції, а не кольору
-        int[] directions;
         if (piece.isKing()) {
-            directions = new int[]{-1, 1};  // Дамка йде в обидва боки
+            addKingMoves(piece, row, col, moves);
         } else {
-            // Звичайна шашка завжди йде "вперед" (до рядка 0)
-            // Незалежно від кольору!
-            directions = new int[]{-1};  // ✅ Завжди вгору після ротації
+            addRegularPieceMoves(piece, row, col, moves);
+        }
+        // Якщо є можливість биття - залишити тільки биття (обов'язкове биття)
+        List<Move> captureMoves = moves.stream()
+                .filter(Move::isCapture)
+                .collect(Collectors.toList());
+
+        if (!captureMoves.isEmpty()) {
+            return captureMoves;
         }
 
-        for (int dRow : directions) {
-            for (int dCol : new int[]{-1, 1}) {
-                // Звичайний хід
-                int newRow = row + dRow;
-                int newCol = col + dCol;
+        return moves;
+    }
 
-                if (isValidPosition(newRow, newCol) && pieces[newRow][newCol] == null) {
-                    boolean promotesToKing = checkPromotion(piece, newRow);
-                    moves.add(new Move(row, col, newRow, newCol, MoveType.NORMAL, promotesToKing));
+
+    private void addRegularPieceMoves(Piece piece, int row, int col, List<Move> moves) {
+        int direction = -1; // Завжди вгору після ротації
+
+        for (int dCol : new int[]{-1, 1}) {
+            // Звичайний хід
+            int newRow = row + direction;
+            int newCol = col + dCol;
+
+            if (isValidPosition(newRow, newCol) && pieces[newRow][newCol] == null) {
+                boolean promotesToKing = checkPromotion(piece, newRow);
+                moves.add(new Move(row, col, newRow, newCol, MoveType.NORMAL, promotesToKing));
+            }
+
+            // Перевірка множинного биття
+        }
+
+        List<Position> emptyPath = new ArrayList<>();
+        emptyPath.add(new Position(row, col));
+        exploreCaptures(piece, row, col, new boolean[SIZE][SIZE], new ArrayList<>(),emptyPath, moves);
+    }
+
+    /**
+     * Рекурсивний пошук множинного биття
+     */
+
+
+    /**
+     * Перевірка чи позиція вже з'їдена в поточному ланцюжку
+     */
+    private boolean isCaptured(int row, int col, List<Position> captured) {
+        for (Position pos : captured) {
+            if (pos.getRow() == row && pos.getCol() == col) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void addKingMoves(Piece piece, int row, int col, List<Move> moves) {
+        // Дамка може ходити в 4 напрямки
+        int[][] directions = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
+        for (int[] dir : directions) {
+            int dRow = dir[0];
+            int dCol = dir[1];
+
+            // Звичайні ходи (до першої перешкоди)
+            for (int distance = 1; distance < SIZE; distance++) {
+                int newRow = row + dRow * distance;
+                int newCol = col + dCol * distance;
+
+                if (!isValidPosition(newRow, newCol)) break;
+
+                if (pieces[newRow][newCol] == null) {
+                    // Порожня клітинка - можна піти
+                    moves.add(new Move(row, col, newRow, newCol, MoveType.NORMAL, false));
+                } else {
+                    // Зустріли шашку - перевірити чи можна з'їсти
+                    if (pieces[newRow][newCol].getColor() != piece.getColor()) {
+                        // Це супротивник - перевірити чи є місце за ним
+                        addKingCaptureMove(piece, row, col, newRow, newCol, dRow, dCol, moves);
+                    }
+                    break; // Зупинитися на першій шашці
                 }
+            }
+        }
 
-                // Захоплення (бите)
+        // ✅ ВИПРАВЛЕНО: Додати початковий шлях для дамки
+        List<Position> initialPath = new ArrayList<>();
+        initialPath.add(new Position(row, col));
+
+        exploreKingCaptures(piece, row, col, new boolean[SIZE][SIZE], new ArrayList<>(), initialPath, moves);
+    }
+
+
+    private void exploreKingCaptures(Piece piece, int row, int col,
+                                     boolean[][] visited, List<Position> capturedSoFar,
+                                     List<Position> pathSoFar, List<Move> allMoves) {
+        boolean foundCapture = false;
+        int[][] directions = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
+        for (int[] dir : directions) {
+            int dRow = dir[0];
+            int dCol = dir[1];
+
+            for (int distance = 1; distance < SIZE; distance++) {
+                int enemyRow = row + dRow * distance;
+                int enemyCol = col + dCol * distance;
+
+                if (!isValidPosition(enemyRow, enemyCol)) break;
+
+                if (pieces[enemyRow][enemyCol] != null) {
+                    if (pieces[enemyRow][enemyCol].getColor() != piece.getColor() &&
+                            !isCaptured(enemyRow, enemyCol, capturedSoFar)) {
+
+                        for (int landDistance = 1; landDistance < SIZE; landDistance++) {
+                            int landRow = enemyRow + dRow * landDistance;
+                            int landCol = enemyCol + dCol * landDistance;
+
+                            if (!isValidPosition(landRow, landCol)) break;
+
+                            if (pieces[landRow][landCol] == null && !visited[landRow][landCol]) {
+                                foundCapture = true;
+                                visited[landRow][landCol] = true;
+
+                                List<Position> newCaptured = new ArrayList<>(capturedSoFar);
+                                newCaptured.add(new Position(enemyRow, enemyCol));
+
+                                List<Position> newPath = new ArrayList<>(pathSoFar);
+                                newPath.add(new Position(landRow, landCol));
+
+                                exploreKingCaptures(piece, landRow, landCol, visited, newCaptured, newPath, allMoves);
+
+                                visited[landRow][landCol] = false;
+                            } else if (pieces[landRow][landCol] != null) {
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (!foundCapture && !capturedSoFar.isEmpty()) {
+            MoveType type = capturedSoFar.size() > 1 ? MoveType.MULTI_CAPTURE : MoveType.CAPTURE;
+            Move move = new Move(piece.getRow(), piece.getCol(), row, col, type, false);
+
+            for (Position pos : capturedSoFar) {
+                move.addCapturedPosition(pos.getRow(), pos.getCol());
+            }
+
+            // ✅ КОПІЮВАТИ ШЛЯХ З РЕКУРСІЇ
+            for (Position pathPos : pathSoFar) {
+                move.addPathPosition(pathPos.getRow(), pathPos.getCol());
+            }
+
+            allMoves.add(move);
+
+            System.out.println("✅ Created king capture move:");
+            System.out.println("   Path: " + pathSoFar.size() + " positions");
+        }
+    }
+
+    /**
+     * Додати хід з битням для дамки
+     */
+    private void addKingCaptureMove(Piece piece, int fromRow, int fromCol,
+                                    int enemyRow, int enemyCol, int dRow, int dCol,
+                                    List<Move> moves) {
+        // Знайти всі можливі позиції за супротивником
+        for (int distance = 1; distance < SIZE; distance++) {
+            int landRow = enemyRow + dRow * distance;
+            int landCol = enemyCol + dCol * distance;
+
+            if (!isValidPosition(landRow, landCol)) break;
+
+            if (pieces[landRow][landCol] == null) {
+                Move move = new Move(fromRow, fromCol, landRow, landCol, MoveType.CAPTURE, false);
+                move.addCapturedPosition(enemyRow, enemyCol);
+                moves.add(move);
+            } else {
+                break; // Зустріли іншу шашку
+            }
+        }
+    }
+
+    private void exploreCaptures(Piece piece, int row, int col, boolean[][] visited,
+                                 List<Position> capturedSoFar, List<Position> pathSoFar,
+                                 List<Move> allMoves) {
+        boolean foundFurtherCapture = false;
+        int[] rowDirs = piece.isKing() ? new int[]{-1, 1} : new int[]{-1,1};
+
+        for (int dRow : rowDirs) {
+            for (int dCol : new int[]{-1, 1}) {
                 int jumpRow = row + dRow * 2;
                 int jumpCol = col + dCol * 2;
                 int midRow = row + dRow;
@@ -442,41 +609,73 @@ public class CheckersBoard extends GridPane {
 
                 if (isValidPosition(jumpRow, jumpCol) &&
                         pieces[jumpRow][jumpCol] == null &&
+                        !visited[jumpRow][jumpCol] &&
                         pieces[midRow][midCol] != null &&
-                        pieces[midRow][midCol].getColor() != piece.getColor()) {
+                        pieces[midRow][midCol].getColor() != piece.getColor() &&
+                        !isCaptured(midRow, midCol, capturedSoFar)) {
 
-                    boolean promotesToKing = checkPromotion(piece, jumpRow);
-                    Move captureMove = new Move(row, col, jumpRow, jumpCol, MoveType.CAPTURE, promotesToKing);
-                    captureMove.addCapturedPosition(midRow, midCol);
-                    moves.add(captureMove);
+                    foundFurtherCapture = true;
+                    visited[jumpRow][jumpCol] = true;
+
+                    // ✅ ВИДАЛЕНО дублювання single capture
+                    // Тепер ходи додаються ТІЛЬКИ в кінці ланцюжка
+
+                    // Рекурсія з оновленим шляхом
+                    List<Position> newCaptured = new ArrayList<>(capturedSoFar);
+                    newCaptured.add(new Position(midRow, midCol));
+
+                    List<Position> newPath = new ArrayList<>(pathSoFar);
+                    newPath.add(new Position(jumpRow, jumpCol));
+
+                    exploreCaptures(piece, jumpRow, jumpCol, visited, newCaptured, newPath, allMoves);
+
+                    visited[jumpRow][jumpCol] = false;
                 }
             }
         }
 
-        return moves;
+        // ✅ Створити хід ТІЛЬКИ якщо це кінець ланцюжка
+        if (!foundFurtherCapture && !capturedSoFar.isEmpty()) {
+            MoveType type = capturedSoFar.size() > 1 ? MoveType.MULTI_CAPTURE : MoveType.CAPTURE;
+            Move move = new Move(piece.getRow(), piece.getCol(), row, col, type,
+                    checkPromotion(piece, row));
+
+            // Додати всі захоплені позиції
+            for (Position pos : capturedSoFar) {
+                move.addCapturedPosition(pos.getRow(), pos.getCol());
+            }
+
+            // ✅ КОПІЮВАТИ ТОЧНИЙ ШЛЯХ З РЕКУРСІЇ (вже містить початок!)
+            for (Position pathPos : pathSoFar) {
+                move.addPathPosition(pathPos.getRow(), pathPos.getCol());
+            }
+
+            allMoves.add(move);
+
+            System.out.println("✅ Created capture move:");
+            System.out.println("   From: (" + piece.getRow() + "," + piece.getCol() + ")");
+            System.out.println("   To: (" + row + "," + col + ")");
+            System.out.println("   Captured: " + capturedSoFar.size() + " pieces");
+            System.out.println("   Path: " + pathSoFar.size() + " positions");
+            for (int i = 0; i < pathSoFar.size(); i++) {
+                Position p = pathSoFar.get(i);
+                System.out.println("      [" + i + "] (" + p.getRow() + "," + p.getCol() + ")");
+            }
+        }
     }
 
 
-    /**
-     * Перевірка чи шашка стане дамкою після ходу
-     */
     private boolean checkPromotion(Piece piece, int newRow) {
         if (piece.isKing()) return false;
-
-
-        return newRow == 0;  // Завжди рядок 0 після ротації
+        return newRow == 0;
     }
 
-    /**
-     * Перевірка чи позиція в межах дошки
-     */
+
     private boolean isValidPosition(int row, int col) {
         return row >= 0 && row < SIZE && col >= 0 && col < SIZE;
     }
 
-    /**
-     * Оновлення розмірів дошки
-     */
+
     private void resizeBoard() {
         double size = Math.min(getWidth(), getHeight());
         cellSize = size / SIZE;
@@ -489,7 +688,6 @@ public class CheckersBoard extends GridPane {
             }
         }
 
-        // Оновити розміри шашок
         for (int row = 0; row < SIZE; row++) {
             for (int col = 0; col < SIZE; col++) {
                 if (pieces[row][col] != null) {
@@ -540,7 +738,6 @@ public class CheckersBoard extends GridPane {
         return state;
     }
 
-    // Геттери та сеттери
     public PieceColor getCurrentTurn() {
         return currentTurn;
     }
@@ -558,16 +755,18 @@ public class CheckersBoard extends GridPane {
         this.onPieceSelected = callback;
     }
 
+    public void setMyColor(PieceColor myColor) {
+        this.myColor = myColor;
+    }
+
     public Piece getSelectedPiece() {
         return selectedPiece;
     }
-
 
     public boolean isAnimating() {
         return animating;
     }
 
-    // Callback інтерфейси
     @FunctionalInterface
     public interface MoveCallback {
         void onMove(Move move);
