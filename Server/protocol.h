@@ -33,6 +33,14 @@ typedef enum {
     OP_ROOMS_LIST = 19,
     OP_ROOM_CREATED = 20,
     OP_MULTI_MOVE = 21,
+    OP_PLAYER_DISCONNECTED = 22,
+    OP_PLAYER_RECONNECTING = 23,
+    OP_PLAYER_RECONNECTED = 24,
+    OP_RECONNECT_REQUEST = 25,
+    OP_RECONNECT_OK = 26,
+    OP_RECONNECT_FAIL = 27,
+    OP_GAME_PAUSED = 28,
+    OP_GAME_RESUMED = 29,
     OP_ERROR = 500
 } OpCode;
 
@@ -43,9 +51,45 @@ typedef struct {
     char data[MAX_DATA_LEN];
 } Message;
 
+
+typedef enum {
+    DISCONNECT_REASON_INVALID_PREFIX,
+    DISCONNECT_REASON_INVALID_FORMAT,
+    DISCONNECT_REASON_INVALID_OPCODE,
+    DISCONNECT_REASON_INVALID_LENGTH,
+    DISCONNECT_REASON_DATA_MISMATCH,
+    DISCONNECT_REASON_BUFFER_OVERFLOW,
+    DISCONNECT_REASON_TOO_MANY_VIOLATIONS,
+    DISCONNECT_REASON_SUSPICIOUS_ACTIVITY
+} DisconnectReason;
+
+typedef struct {
+    int invalid_message_count;      // Кількість невалідних повідомлень
+    int unknown_opcode_count;       // Кількість невідомих OpCode
+    time_t last_violation_time;     // Час останнього порушення
+} ClientViolations;
+
+#define MAX_VIOLATIONS 1
+#define VIOLATION_RESET_TIME 60
+
 // Function prototypes
-int parse_message(const char *buffer, Message *msg);
+int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect_reason);
 int create_message(char *buffer, OpCode op, const char *data);
 void log_message(const char *prefix, const Message *msg);
+
+bool is_valid_opcode(int op);
+
+bool is_numeric_string(const char *str, int len);
+
+bool should_disconnect_client(ClientViolations *violations);
+
+void log_security_violation(int client_socket, const char *client_id,
+                            DisconnectReason reason, const char *raw_message);
+
+const char* get_disconnect_reason_string(DisconnectReason reason);
+
+
+void disconnect_malicious_client(struct Server *server, struct Client *client,
+                                DisconnectReason reason, const char *raw_message);
 
 #endif //SERVER_PROTOCOL_H
