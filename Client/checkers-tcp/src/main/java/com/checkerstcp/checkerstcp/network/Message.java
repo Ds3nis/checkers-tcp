@@ -54,6 +54,12 @@ public class Message {
                 return null;
             }
 
+            if (declaredLength < 0) {
+                System.err.println("SECURITY: Negative length: " + declaredLength);
+                return null;
+            }
+
+
             if (declaredLength > MAX_DATA_LENGTH) {
                 System.err.println("Data length exceeds maximum: " + declaredLength + " > " + MAX_DATA_LENGTH);
                 return null;

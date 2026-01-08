@@ -139,7 +139,7 @@
       </VBox>
       <HBox alignment="CENTER_RIGHT" prefHeight="40.0" prefWidth="700.0" spacing="10.0" styleClass="footer" stylesheets="@css/lobby.css">
          <Label styleClass="footer-text" stylesheets="@css/lobby.css" text="Stav sítě:" />
-         <Label fx:id="netStateLbl" styleClass="footer-status" stylesheets="@css/lobby.css" text="offline" />
+         <Label fx:id="netStateLbl" styleClass="footer-status" stylesheets="@css/lobby.css" text="offline" HBox.hgrow="ALWAYS" />
          <padding>
             <Insets bottom="5.0" right="10.0" top="5.0" />
          </padding>
