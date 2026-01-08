@@ -20,6 +20,13 @@ typedef enum {
     BLACK_KING = 4
 } PieceType;
 
+typedef enum {
+    ROOM_STATE_WAITING,
+    ROOM_STATE_ACTIVE,
+    ROOM_STATE_PAUSED,
+    ROOM_STATE_FINISHED
+} RoomState;
+
 // Player color
 typedef enum {
     COLOR_WHITE = 1,
@@ -46,6 +53,12 @@ typedef struct {
     int players_count;
     Game game;
     bool game_started;
+
+    RoomState state;
+    time_t pause_start_time;
+    char disconnected_player[MAX_PLAYER_NAME];
+    bool waiting_for_reconnect;
+    pthread_mutex_t room_mutex;
 } Room;
 
 // Function prototypes
