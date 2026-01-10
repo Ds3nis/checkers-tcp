@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include "game.h"
 #include "protocol.h"
+#include "client_state_machine.h"
 
 #define MAX_CLIENTS 100
 #define MAX_ROOMS 50
@@ -33,6 +34,7 @@ typedef struct {
     char current_room[MAX_ROOM_NAME];
 
     ClientState state;
+    ClientGameState game_state;
     time_t last_pong_time;
     time_t disconnect_time;
     int missed_pongs;
@@ -126,6 +128,7 @@ void handle_player_disconnect(Server *server, Client *client);
 void handle_player_long_disconnect(Server *server, Client *client);
 void check_room_pause_timeouts(Server *server);
 
+bool validate_operation(Server *server, Client *client, OpCode op);
 void log_client (const Client *client);
 
 #endif //SERVER_SERVER_H
