@@ -2,11 +2,15 @@
 // Created by denkhuda on 11/17/25.
 //
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include "protocol.h"
 #include "server.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
+#include <ctype.h>
+#include <unistd.h>
 
 const char* get_disconnect_reason_string(DisconnectReason reason) {
     switch (reason) {
@@ -68,39 +72,6 @@ bool should_disconnect_client(ClientViolations *violations) {
 }
 
 
-void disconnect_malicious_client(Server *server, Client *client,
-                                DisconnectReason reason, const char *raw_message) {
-    char error_msg[256];
-    snprintf(error_msg, sizeof(error_msg),
-             "Protocol violation: %s. Disconnecting.",
-             get_disconnect_reason_string(reason));
-    send_message(client->socket, OP_ERROR, error_msg);
-
-    close(client->socket);
-    client->active = false;
-
-    if (client->logged_in) {
-        pthread_mutex_lock(&server->clients_mutex);
-
-        if (client->current_room[0] != '\0') {
-            leave_room(server, client->current_room, client->client_id);
-            client->current_room[0] = '\0';
-        }
-
-        pthread_mutex_destroy(&client->state_mutex);
-        server->client_count--;
-
-        pthread_mutex_unlock(&server->clients_mutex);
-
-        printf("🚨 Malicious client '%s' forcibly disconnected\n", client->client_id);
-    } else {
-        pthread_mutex_lock(&server->clients_mutex);
-        server->client_count--;
-        pthread_mutex_unlock(&server->clients_mutex);
-
-        printf("🚨 Anonymous client (socket %d) forcibly disconnected\n", client->socket);
-    }
-}
 
 // Parse incoming message: DENTCP|OP|LEN|DATA
 int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect_reason) {
@@ -133,7 +104,7 @@ int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect
     }
 
     int op_len = next_pipe - ptr;
-    if (op_len <= 0 || op_len >= sizeof(temp)) {
+    if (op_len <= 0 || (size_t)op_len >= sizeof(temp)) {
         fprintf(stderr, "SECURITY: Invalid OP length: %d\n", op_len);
         *disconnect_reason = DISCONNECT_REASON_INVALID_FORMAT;
         return -1;

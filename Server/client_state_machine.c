@@ -2,11 +2,10 @@
 // Created by Denis on 10.01.2026.
 //
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "client_state_machine.h"
 #include "server.h"
+#include <stdio.h>
+#include <string.h>
 
 
 const char* client_game_state_to_string(ClientGameState state) {
@@ -45,6 +44,7 @@ AllowedOperations get_allowed_operations(ClientGameState state) {
 
         case CLIENT_GAME_STATE_IN_ROOM_WAITING:
             ops.allowed_ops[ops.count++] = OP_LEAVE_ROOM;
+            ops.allowed_ops[ops.count++] = OP_LIST_ROOMS;
             ops.allowed_ops[ops.count++] = OP_PONG;
             ops.allowed_ops[ops.count++] = OP_PING;
             break;
@@ -84,26 +84,5 @@ void transition_client_state(Client *client, ClientGameState new_state) {
     client->game_state = new_state;
 }
 
-void log_invalid_operation_attempt(Client *client, OpCode attempted_op) {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "═══════════════════════════════════════════════════\n");
-    fprintf(stderr, "INVALID OPERATION ATTEMPT\n");
-    fprintf(stderr, "═══════════════════════════════════════════════════\n");
-    fprintf(stderr, "Client: %s (socket %d)\n",
-            client->client_id[0] ? client->client_id : "NOT_LOGGED_IN",
-            client->socket);
-    fprintf(stderr, "Current State: %s\n", client_game_state_to_string(client->game_state));
-    fprintf(stderr, "Attempted Operation: %d\n", attempted_op);
-    fprintf(stderr, "Timestamp: %ld\n", time(NULL));
 
-    fprintf(stderr, "Allowed Operations in this state: ");
-    AllowedOperations ops = get_allowed_operations(client->game_state);
-    for (int i = 0; i < ops.count; i++) {
-        fprintf(stderr, "%d", ops.allowed_ops[i]);
-        if (i < ops.count - 1) fprintf(stderr, ", ");
-    }
-    fprintf(stderr, "\n");
-    fprintf(stderr, "═══════════════════════════════════════════════════\n");
-    fprintf(stderr, "\n");
-}
 

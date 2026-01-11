@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wextra -pthread -g -O2
 LDFLAGS = -pthread
 
 TARGET = checkers_server
-OBJS = main.o server.o game.o protocol.o
+OBJS = main.o server.o game.o protocol.o client_state_machine.o
 
 .PHONY: all clean
 
@@ -16,7 +16,7 @@ $(TARGET): $(OBJS)
 main.o: main.c server.h
 	$(CC) $(CFLAGS) -c main.c
 
-server.o: server.c server.h protocol.h game.h
+server.o: server.c server.h protocol.h game.h client_state_machine.h
 	$(CC) $(CFLAGS) -c server.c
 
 game.o: game.c game.h
@@ -24,6 +24,9 @@ game.o: game.c game.h
 
 protocol.o: protocol.c protocol.h
 	$(CC) $(CFLAGS) -c protocol.c
+
+client_state_machine.o: client_state_machine.c client_state_machine.h server.h protocol.h
+	$(CC) $(CFLAGS) -c client_state_machine.c
 
 clean:
 	rm -f $(OBJS) $(TARGET)

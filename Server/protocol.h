@@ -5,6 +5,11 @@
 #ifndef SERVER_PROTOCOL_H
 #define SERVER_PROTOCOL_H
 
+#include <stdbool.h>
+#include <time.h>
+#include <ctype.h>
+
+
 #define PREFIX "DENTCP"
 #define PREFIX_LEN 6
 #define MAX_MESSAGE_LEN 8192
@@ -83,13 +88,6 @@ bool is_numeric_string(const char *str, int len);
 
 bool should_disconnect_client(ClientViolations *violations);
 
-void log_security_violation(int client_socket, const char *client_id,
-                            DisconnectReason reason, const char *raw_message);
-
 const char* get_disconnect_reason_string(DisconnectReason reason);
-
-
-void disconnect_malicious_client(struct Server *server, struct Client *client,
-                                DisconnectReason reason, const char *raw_message);
 
 #endif //SERVER_PROTOCOL_H

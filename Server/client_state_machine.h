@@ -7,7 +7,9 @@
 
 #include <stdbool.h>
 #include "protocol.h"
-#include "server.h"
+
+
+typedef struct Client Client;
 
 typedef enum {
     CLIENT_GAME_STATE_NOT_LOGGED_IN,    // Ще не залогінений

@@ -8,6 +8,7 @@
 #include <errno.h>
 #include "server.h"
 #include "protocol.h"
+#include "client_state_machine.h"
 
 #define PING_INTERVAL_SEC 5              // Інтервал пінгів
 #define PONG_TIMEOUT_SEC 3               // Таймаут очікування понгу
@@ -601,6 +602,47 @@ void remove_client(Server *server, const char *client_id) {
     pthread_mutex_unlock(&server->clients_mutex);
 }
 
+void disconnect_malicious_client(Server *server, Client *client,
+                                DisconnectReason reason, const char *raw_message) {
+    (void)raw_message; // Unused parameter
+
+    printf("[DISCONNECT] Disconnecting malicious client: %s (socket %d)\n",
+           client->client_id, client->socket);
+
+    // Якщо клієнт в кімнаті, виходимо з неї
+    if (client->current_room[0] != '\0') {
+        leave_room(server, client->current_room, client->client_id);
+    }
+
+    // Закриваємо з'єднання
+    close(client->socket);
+
+    // Позначаємо клієнта як неактивного
+    pthread_mutex_lock(&client->state_mutex);
+    client->active = false;
+    client->state = CLIENT_STATE_REMOVED;
+    pthread_mutex_unlock(&client->state_mutex);
+
+    // Видаляємо клієнта з списку
+    pthread_mutex_lock(&server->clients_mutex);
+    for (int i = 0; i < server->client_count; i++) {
+        if (strcmp(server->clients[i].client_id, client->client_id) == 0) {
+            // Зсуваємо елементи
+            for (int j = i; j < server->client_count - 1; j++) {
+                server->clients[j] = server->clients[j + 1];
+            }
+            server->client_count--;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&server->clients_mutex);
+}
+
+
+
+
+
+
 Client* find_client(Server *server, const char *client_id) {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (server->clients[i].active &&
@@ -1138,6 +1180,7 @@ void handle_leave_room(Server *server, Client *client, const char *data) {
 }
 
 void handle_ping(Server *server, Client *client) {
+    (void)server;
     send_message(client->socket, OP_PONG, "");
     printf("PONG TO SOCKET %d\n", client->socket);
 }
@@ -1221,7 +1264,7 @@ void* client_handler(void *arg) {
         for (int i = 0; i < bytes; i++) {
             char current_char = recv_buffer[i];
 
-            if (message_pos >= sizeof(message_buffer) - 1) {
+            if ((size_t)message_pos >= sizeof(message_buffer) - 1) {
                 fprintf(stderr, "SECURITY: Message buffer overflow from socket %d\n",
                          client_socket);
 
@@ -1458,4 +1501,27 @@ void server_stop(Server *server) {
 
 void log_client(const Client *client) {
     printf("[%d] CLIENT_ID=%s THREAD=%d ACTIVE=%d LOGGED=%d ROOM=%s \n", client->socket, client->client_id, client->thread, client->active, client->logged_in, client->current_room);
+}
+
+void log_invalid_operation_attempt(Client *client, OpCode attempted_op) {
+    fprintf(stderr, "\n");
+    fprintf(stderr, "═══════════════════════════════════════════════════\n");
+    fprintf(stderr, "INVALID OPERATION ATTEMPT\n");
+    fprintf(stderr, "═══════════════════════════════════════════════════\n");
+    fprintf(stderr, "Client: %s (socket %d)\n",
+            client->client_id[0] ? client->client_id : "NOT_LOGGED_IN",
+            client->socket);
+    fprintf(stderr, "Current State: %s\n", client_game_state_to_string(client->game_state));
+    fprintf(stderr, "Attempted Operation: %d\n", attempted_op);
+    fprintf(stderr, "Timestamp: %ld\n", time(NULL));
+
+    fprintf(stderr, "Allowed Operations in this state: ");
+    AllowedOperations ops = get_allowed_operations(client->game_state);
+    for (int i = 0; i < ops.count; i++) {
+        fprintf(stderr, "%d", ops.allowed_ops[i]);
+        if (i < ops.count - 1) fprintf(stderr, ", ");
+    }
+    fprintf(stderr, "\n");
+    fprintf(stderr, "═══════════════════════════════════════════════════\n");
+    fprintf(stderr, "\n");
 }

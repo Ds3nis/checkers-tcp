@@ -6,6 +6,8 @@
 #define SERVER_GAME_H
 
 #include <stdbool.h>
+#include <pthread.h>
+#include <time.h>
 
 #define BOARD_SIZE 8
 #define MAX_ROOM_NAME 64
@@ -70,5 +72,6 @@ void apply_move(Game *game, int from_row, int from_col, int to_row, int to_col);
 void change_turn(Game *game);
 bool check_game_over(const Game *game, char *winner);
 void rotate_board(const Game *game, int rotated[BOARD_SIZE][BOARD_SIZE]);
+void print_board(const Game *game);
 
 #endif //SERVER_GAME_H

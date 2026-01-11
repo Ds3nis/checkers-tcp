@@ -1,7 +1,8 @@
+#include "game.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "game.h"
+
 
 void init_game(Game *game, const char *player1, const char *player2) {
     // Initialize board (like in Java example)
@@ -308,8 +309,10 @@ void print_board(const Game *game) {
 void change_turn(Game *game) {
     if (strcmp(game->current_turn, game->player1) == 0) {
         strncpy(game->current_turn, game->player2, MAX_PLAYER_NAME - 1);
+        game->current_turn[MAX_PLAYER_NAME - 1] = '\0';
     } else {
         strncpy(game->current_turn, game->player1, MAX_PLAYER_NAME - 1);
+        game->current_turn[MAX_PLAYER_NAME - 1] = '\0';
     }
 }
 

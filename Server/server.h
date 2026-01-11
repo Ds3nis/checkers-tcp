@@ -7,6 +7,7 @@
 
 #include <pthread.h>
 #include <stdbool.h>
+#include <time.h>
 #include "game.h"
 #include "protocol.h"
 #include "client_state_machine.h"
@@ -25,7 +26,7 @@ typedef enum {
 
 
 // Client structure
-typedef struct {
+typedef struct Client {
     int socket;
     char client_id[MAX_PLAYER_NAME];
     pthread_t thread;
@@ -129,6 +130,10 @@ void handle_player_long_disconnect(Server *server, Client *client);
 void check_room_pause_timeouts(Server *server);
 
 bool validate_operation(Server *server, Client *client, OpCode op);
-void log_client (const Client *client);
+void log_client(const Client *client);
+void log_invalid_operation_attempt(Client *client, OpCode attempted_op);
+void disconnect_malicious_client(Server *server, Client *client,
+                                DisconnectReason reason, const char *raw_message);
+
 
 #endif //SERVER_SERVER_H
