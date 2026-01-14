@@ -128,6 +128,7 @@ const char* room_get_state_string(RoomState state);
 void handle_player_disconnect(Server *server, Client *client);
 void handle_player_long_disconnect(Server *server, Client *client);
 void check_room_pause_timeouts(Server *server);
+bool can_client_reconnect(Server *server, const char *player_name);
 
 bool validate_operation(Server *server, Client *client, OpCode op);
 void log_client(const Client *client);

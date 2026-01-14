@@ -30,8 +30,9 @@ AllowedOperations get_allowed_operations(ClientGameState state) {
     switch (state) {
         case CLIENT_GAME_STATE_NOT_LOGGED_IN:
             ops.allowed_ops[ops.count++] = OP_LOGIN;
-            ops.allowed_ops[ops.count++] = OP_PONG;  // Heartbeat завжди дозволений
+            ops.allowed_ops[ops.count++] = OP_PONG;
             ops.allowed_ops[ops.count++] = OP_PING;
+            ops.allowed_ops[ops.count++] = OP_RECONNECT_REQUEST;
             break;
 
         case CLIENT_GAME_STATE_IN_LOBBY:
@@ -40,18 +41,22 @@ AllowedOperations get_allowed_operations(ClientGameState state) {
             ops.allowed_ops[ops.count++] = OP_LIST_ROOMS;
             ops.allowed_ops[ops.count++] = OP_PONG;
             ops.allowed_ops[ops.count++] = OP_PING;
+            ops.allowed_ops[ops.count++] = OP_RECONNECT_REQUEST;
             break;
 
         case CLIENT_GAME_STATE_IN_ROOM_WAITING:
             ops.allowed_ops[ops.count++] = OP_LEAVE_ROOM;
+            ops.allowed_ops[ops.count++] = OP_JOIN_ROOM;
             ops.allowed_ops[ops.count++] = OP_LIST_ROOMS;
             ops.allowed_ops[ops.count++] = OP_PONG;
             ops.allowed_ops[ops.count++] = OP_PING;
+            ops.allowed_ops[ops.count++] = OP_RECONNECT_REQUEST;
             break;
 
         case CLIENT_GAME_STATE_IN_GAME:
             ops.allowed_ops[ops.count++] = OP_MOVE;
             ops.allowed_ops[ops.count++] = OP_MULTI_MOVE;
+            ops.allowed_ops[ops.count++] = OP_LIST_ROOMS;
             ops.allowed_ops[ops.count++] = OP_LEAVE_ROOM;
             ops.allowed_ops[ops.count++] = OP_PONG;
             ops.allowed_ops[ops.count++] = OP_PING;
