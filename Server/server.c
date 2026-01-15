@@ -449,14 +449,16 @@ void check_room_pause_timeouts(Server *server) {
     pthread_mutex_unlock(&server->rooms_mutex);
 }
 
+
 void handle_reconnect_request(Server *server, Client *client, const char *data) {
     char room_name[MAX_ROOM_NAME];
     char player_name[MAX_PLAYER_NAME];
 
-    // Дані можуть бути: "room_name,player_name" або просто "player_name"
+    // Парсити: "room_name,player_name" або "player_name"
     int parsed = sscanf(data, "%[^,],%s", room_name, player_name);
 
     if (parsed == 1) {
+        // Тільки player_name
         strncpy(player_name, room_name, MAX_PLAYER_NAME - 1);
         player_name[MAX_PLAYER_NAME - 1] = '\0';
         room_name[0] = '\0';
@@ -465,69 +467,88 @@ void handle_reconnect_request(Server *server, Client *client, const char *data) 
         return;
     }
 
-    printf("Reconnect request from %s (room: %s)\n",
-           player_name, room_name[0] ? room_name : "none");
+    printf("🔄 Reconnect request from %s (room: %s)\n",
+           player_name, room_name[0] ? room_name : "lobby");
 
     pthread_mutex_lock(&server->clients_mutex);
 
-    Client *old_client = find_client(server, player_name);
+    // ========== ЗНАЙТИ СТАРОГО ВІДКЛЮЧЕНОГО КЛІЄНТА ==========
+    Client *old_client = NULL;
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (server->clients[i].logged_in &&
+            strcmp(server->clients[i].client_id, player_name) == 0 &&
+            (server->clients[i].state == CLIENT_STATE_DISCONNECTED ||
+             server->clients[i].state == CLIENT_STATE_TIMEOUT)) {
+            old_client = &server->clients[i];
+            break;
+        }
+    }
 
     if (!old_client) {
         pthread_mutex_unlock(&server->clients_mutex);
-        send_message(client->socket, OP_RECONNECT_FAIL, "Client not found on server");
-        printf("❌ Reconnect failed: client %s not found\n", player_name);
+        send_message(client->socket, OP_RECONNECT_FAIL, "Client not found or not disconnected");
+        printf("❌ Reconnect failed: client '%s' not found or not disconnected\n", player_name);
         return;
     }
 
-    if (old_client->state != CLIENT_STATE_DISCONNECTED &&
-        old_client->state != CLIENT_STATE_TIMEOUT) {
-        pthread_mutex_unlock(&server->clients_mutex);
-        send_message(client->socket, OP_RECONNECT_FAIL, "Client not disconnected");
-        printf("Reconnect rejected: %s is not disconnected (state: %s)\n",
-               player_name, client_get_state_string(old_client->state));
-        return;
-    }
+    printf("✅ Found disconnected client '%s' (old socket: %d, new socket: %d)\n",
+           player_name, old_client->socket, client->socket);
 
-    // ========== ЗАМІНИТИ СОКЕТ СТАРОГО КЛІЄНТА ==========
-    // Закрити старий сокет
+    // ========== ЗАМІНИТИ СОКЕТ ТА ПОТІК ==========
+
+    // 1. Закрити старий сокет
     close(old_client->socket);
+    printf("   Closed old socket %d\n", old_client->socket);
 
-    // Оновити сокет на новий
+    // 2. Оновити сокет на новий
+    int old_socket = old_client->socket;
     old_client->socket = client->socket;
 
-    // Позначити як реконектнутий
-    client_mark_reconnected(old_client);
+    // 3. Оновити потік (ВАЖЛИВО!)
+    old_client->thread = client->thread;
 
-    // Скопіювати нового клієнта в старого
+    // 4. Позначити як реконектнутий
+    pthread_mutex_lock(&old_client->state_mutex);
+    client_mark_reconnected(old_client);
+    pthread_mutex_unlock(&old_client->state_mutex);
+
     old_client->active = true;
 
-    // Деактивувати тимчасового клієнта
+    // 5. Деактивувати тимчасового клієнта (НЕ закривати сокет!)
     client->active = false;
+    client->logged_in = false;
+    client->client_id[0] = '\0';
+
+    printf("   Transferred socket %d → %d for client '%s'\n",
+           old_socket, old_client->socket, player_name);
 
     pthread_mutex_unlock(&server->clients_mutex);
 
+    // ========== ВІДНОВИТИ СТАН ЗАЛЕЖНО ВІД game_state ==========
+
     ClientGameState game_state = old_client->game_state;
 
-    printf("Restoring client %s to state: %s\n",
+    printf("📍 Restoring client '%s' to state: %s\n",
            player_name, client_game_state_to_string(game_state));
 
     switch (game_state) {
         case CLIENT_GAME_STATE_NOT_LOGGED_IN:
             send_message(old_client->socket, OP_RECONNECT_FAIL, "Not logged in");
-            printf("Unexpected: client was in NOT_LOGGED_IN state\n");
+            printf("❌ Unexpected: client was in NOT_LOGGED_IN state\n");
             break;
 
         case CLIENT_GAME_STATE_IN_LOBBY:
+            // Реконект в лобі
             send_message(old_client->socket, OP_RECONNECT_OK, "lobby");
             send_message(old_client->socket, OP_LOGIN_OK, player_name);
-
-            printf("%s reconnected to lobby\n", player_name);
+            printf("✅ %s reconnected to lobby\n", player_name);
             break;
 
         case CLIENT_GAME_STATE_IN_ROOM_WAITING:
+            // Реконект в кімнаті (чекає гравця)
             if (room_name[0] == '\0') {
                 send_message(old_client->socket, OP_RECONNECT_FAIL, "Room name required");
-                printf("Room name required for IN_ROOM_WAITING state\n");
+                printf("❌ Room name required for IN_ROOM_WAITING state\n");
                 break;
             }
 
@@ -537,17 +558,19 @@ void handle_reconnect_request(Server *server, Client *client, const char *data) 
             if (!waiting_room) {
                 pthread_mutex_unlock(&server->rooms_mutex);
 
+                // Кімната видалена - fallback до лобі
                 old_client->current_room[0] = '\0';
                 transition_client_state(old_client, CLIENT_GAME_STATE_IN_LOBBY);
 
                 send_message(old_client->socket, OP_RECONNECT_FAIL, "Room was closed");
                 send_message(old_client->socket, OP_LOGIN_OK, player_name);
 
-                printf("Room %s not found, returning %s to lobby\n",
+                printf("⚠️ Room %s not found, returning %s to lobby\n",
                        room_name, player_name);
                 break;
             }
 
+            // Кімната існує
             send_message(old_client->socket, OP_RECONNECT_OK, room_name);
 
             char room_info[256];
@@ -557,14 +580,15 @@ void handle_reconnect_request(Server *server, Client *client, const char *data) 
 
             pthread_mutex_unlock(&server->rooms_mutex);
 
-            printf("%s reconnected to room %s (waiting for player)\n",
+            printf("✅ %s reconnected to room %s (waiting)\n",
                    player_name, room_name);
             break;
 
         case CLIENT_GAME_STATE_IN_GAME:
+            // Реконект в грі
             if (room_name[0] == '\0') {
                 send_message(old_client->socket, OP_RECONNECT_FAIL, "Room name required");
-                printf("Room name required for IN_GAME state\n");
+                printf("❌ Room name required for IN_GAME state\n");
                 break;
             }
 
@@ -573,35 +597,41 @@ void handle_reconnect_request(Server *server, Client *client, const char *data) 
 
             if (!game_room) {
                 pthread_mutex_unlock(&server->rooms_mutex);
+
+                // Гра закінчилась - fallback до лобі
                 old_client->current_room[0] = '\0';
                 transition_client_state(old_client, CLIENT_GAME_STATE_IN_LOBBY);
 
                 send_message(old_client->socket, OP_RECONNECT_FAIL, "Game ended");
                 send_message(old_client->socket, OP_LOGIN_OK, player_name);
 
-                printf("Game in room %s ended, returning %s to lobby\n",
-                       room_name, player_name);
+                printf("⚠️ Game ended, returning %s to lobby\n", player_name);
                 break;
             }
 
+            // Перевірити членство
             bool is_player1 = (strcmp(game_room->player1, player_name) == 0);
             bool is_player2 = (strcmp(game_room->player2, player_name) == 0);
 
             if (!is_player1 && !is_player2) {
                 pthread_mutex_unlock(&server->rooms_mutex);
                 send_message(old_client->socket, OP_RECONNECT_FAIL, "Not a member");
-                printf("%s is not a member of room %s\n", player_name, room_name);
+                printf("❌ %s is not a member of room %s\n", player_name, room_name);
                 break;
             }
 
+            // Відновити гру
             if (game_room->state == ROOM_STATE_PAUSED) {
+                // Гра призупинена - відновити
                 room_resume_game(game_room);
 
                 send_message(old_client->socket, OP_RECONNECT_OK, room_name);
                 send_message(old_client->socket, OP_GAME_RESUMED, room_name);
+
                 char *board_json = game_board_to_json(&game_room->game);
                 send_message(old_client->socket, OP_GAME_STATE, board_json);
 
+                // Повідомити іншого гравця
                 char *other_player = is_player1 ? game_room->player2 : game_room->player1;
                 if (other_player[0] != '\0') {
                     Client *other = find_client(server, other_player);
@@ -613,25 +643,26 @@ void handle_reconnect_request(Server *server, Client *client, const char *data) 
                     }
                 }
 
-                printf("%s reconnected, game in %s resumed\n", player_name, room_name);
+                printf("✅ %s reconnected, game resumed\n", player_name);
 
             } else if (game_room->state == ROOM_STATE_ACTIVE) {
+                // Швидкий реконект - гра не встигла призупинитись
                 send_message(old_client->socket, OP_RECONNECT_OK, room_name);
 
                 char *board_json = game_board_to_json(&game_room->game);
                 send_message(old_client->socket, OP_GAME_STATE, board_json);
 
-                printf("%s reconnected to active game in %s\n", player_name, room_name);
+                printf("✅ %s reconnected to active game\n", player_name);
 
             } else {
+                // Гра в іншому стані
                 send_message(old_client->socket, OP_RECONNECT_FAIL, "Game not active");
 
                 old_client->current_room[0] = '\0';
                 transition_client_state(old_client, CLIENT_GAME_STATE_IN_LOBBY);
                 send_message(old_client->socket, OP_LOGIN_OK, player_name);
 
-                printf("Game in room %s is not active, returning %s to lobby\n",
-                       room_name, player_name);
+                printf("⚠️ Game not active, returning %s to lobby\n", player_name);
             }
 
             pthread_mutex_unlock(&server->rooms_mutex);
@@ -639,9 +670,10 @@ void handle_reconnect_request(Server *server, Client *client, const char *data) 
 
         default:
             send_message(old_client->socket, OP_RECONNECT_FAIL, "Unknown state");
-            printf("Unknown game state: %d\n", game_state);
+            printf("❌ Unknown game state: %d\n", game_state);
             break;
     }
+
 }
 
 
@@ -1484,6 +1516,7 @@ void* client_handler(void *arg) {
     pthread_mutex_unlock(&server->clients_mutex);
 
     if (!client) {
+        printf("❌ Client not found for socket %d\n", client_socket);
         close(client_socket);
         return NULL;
     }
@@ -1495,7 +1528,13 @@ void* client_handler(void *arg) {
         memset(recv_buffer, 0, BUFFER_SIZE);
         int bytes = recv(client_socket, recv_buffer, BUFFER_SIZE - 1, 0);
 
+
         if (bytes <= 0) {
+            if (client_socket != client->socket) {
+                printf("Socket changed %d → %d, continuing...\n",
+                       client_socket, client->socket);
+                continue;
+            }
             break;
         }
 
