@@ -5,9 +5,7 @@ import com.checkerstcp.checkerstcp.Position;
 import java.io.*;
 import java.net.*;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -33,7 +31,32 @@ public class ClientConnection {
     private static final long COUNTER_RESET_INTERVAL = 5000; // Скидати лічильники кожні 5 секунд
     private long lastCounterReset = System.currentTimeMillis();
 
+    private HeartbeatManager heartbeatManager;
+    private ReconnectManager reconnectManager;
+    private boolean inReconnectMode = false;
+
+    private final AtomicInteger invalidMessageCount = new AtomicInteger(0);
+    private static final int MAX_INVALID_MESSAGES = 1;
+    private long lastInvalidMessageTime = 0;
+    private static final long INVALID_MESSAGE_RESET_TIME = 60000;
+
+    private ReconnectManager.ClientGameState currentGameState;
+
+
     public ClientConnection() {
+        heartbeatManager = new HeartbeatManager(this);
+        reconnectManager = new ReconnectManager(this);
+
+        currentGameState = ReconnectManager.ClientGameState.NOT_LOGGED_IN;
+
+        heartbeatManager.setOnConnectionLost(() -> {
+            System.err.println("Heartbeat detected connection loss");
+            handleConnectionLoss();
+        });
+
+        heartbeatManager.setOnConnectionRestored(() -> {
+            System.out.println("Heartbeat detected connection restored");
+        });
     }
 
     public synchronized boolean connect(String host, int port, String clientId) {
@@ -56,11 +79,18 @@ public class ClientConnection {
             out = new PrintWriter(socket.getOutputStream(), true);
 
             connected = true;
+            invalidMessageCount.set(0);
+            lastInvalidMessageTime = 0;
 
             startListenerThread();
             startSenderThread();
 
+
             sendLogin(clientId);
+
+            heartbeatManager.start();
+
+            reconnectManager.saveConnectionData(host, port, clientId, null, ReconnectManager.ClientGameState.IN_LOBBY);
 
             notifyConnectionState(true);
             System.out.println("Connected to " + host + ":" + port);
@@ -84,8 +114,132 @@ public class ClientConnection {
             return;
         }
 
+        heartbeatManager.stop();
+        reconnectManager.stopReconnect();
+
         connected = false;
 
+        cleanupConnection();
+
+        notifyConnectionState(false);
+        System.out.println("Disconnected from server");
+    }
+
+    public synchronized boolean reconnect(String host, int port, String clientId) {
+        System.out.println("🔌 Attempting TCP reconnect to " + host + ":" + port);
+
+        cleanupConnection();
+        inReconnectMode = true;
+
+        try {
+            socket = new Socket();
+            SocketAddress endpoint = new InetSocketAddress(host, port);
+            socket.connect(endpoint, 5000);
+
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            out = new PrintWriter(socket.getOutputStream(), true);
+
+            connected = true;
+            invalidMessageCount.set(0);
+            lastInvalidMessageTime = 0;
+
+            startListenerThread();
+            startSenderThread();
+
+            heartbeatManager.reset();
+            heartbeatManager.start();
+
+            System.out.println("✅ TCP connection established (protocol verification pending)");
+
+            return true;
+
+        } catch (SocketTimeoutException e) {
+            System.err.println("Connection timeout: Server not responding");
+            forceCloseSocket();
+            connected = false;
+            inReconnectMode = false;
+            return false;
+        } catch (IOException e) {
+            System.err.println("Reconnect failed: " + e.getMessage());
+            connected = false;
+            inReconnectMode = false;
+            return false;
+        }
+    }
+
+    public synchronized void forceCloseSocket() {
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+                System.out.println("Socket forcefully closed (reconnect cleanup)");
+            }
+        } catch (IOException e) {
+            System.err.println("Error closing socket: " + e.getMessage());
+        }
+    }
+
+    private boolean verifyReconnect(String room, String playerId) {
+        try {
+            sendReconnectRequest(room, playerId);
+
+            CompletableFuture<Boolean> responseFuture = new CompletableFuture<>();
+
+            // Тимчасовий обробник для перевірки відповіді
+            Consumer<Message> oldHandler = messageHandler;
+            messageHandler = msg -> {
+                if (msg.getOpCode() == OpCode.RECONNECT_OK) {
+                    responseFuture.complete(true);
+                } else if (msg.getOpCode() == OpCode.RECONNECT_FAIL) {
+                    responseFuture.complete(false);
+                }
+                if (oldHandler != null) {
+                    oldHandler.accept(msg);
+                }
+            };
+
+            try {
+                return responseFuture.get(5, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                System.err.println("No response from server on reconnect request");
+                return false;
+            } finally {
+                messageHandler = oldHandler;
+            }
+
+        } catch (Exception e) {
+            System.err.println("❌ Error verifying reconnect: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void handleConnectionLoss() {
+        if (!connected) {
+            return;
+        }
+
+        System.err.println("Connection lost!");
+
+        inReconnectMode = true;
+        connected = false;
+
+        heartbeatManager.stop();
+
+        cleanupConnection();
+
+        notifyConnectionState(false);
+
+        reconnectManager.saveConnectionData(
+                serverHost,
+                serverPort,
+                clientId,
+                getCurrentRoom(),
+                currentGameState
+        );
+
+        reconnectManager.startReconnect();
+    }
+
+    private void cleanupConnection() {
         try {
             if (listenerThread != null) {
                 listenerThread.interrupt();
@@ -103,12 +257,31 @@ public class ClientConnection {
                 socket.close();
             }
         } catch (IOException e) {
-            System.err.println("Error during disconnect: " + e.getMessage());
+            System.err.println("Error during cleanup: " + e.getMessage());
         }
-
-        notifyConnectionState(false);
-        System.out.println("Disconnected from server");
     }
+
+    public void transitionToLobby() {
+        currentGameState = ReconnectManager.ClientGameState.IN_LOBBY;
+        reconnectManager.setGameState(currentGameState);
+        reconnectManager.setCurrentRoom(null);
+        System.out.println("State: IN_LOBBY");
+    }
+
+    public void transitionToRoomWaiting(String roomName) {
+        currentGameState = ReconnectManager.ClientGameState.IN_ROOM_WAITING;
+        reconnectManager.setGameState(currentGameState);
+        reconnectManager.setCurrentRoom(roomName);
+        System.out.println("State: IN_ROOM_WAITING (room: " + roomName + ")");
+    }
+
+    public void transitionToGame(String roomName) {
+        currentGameState = ReconnectManager.ClientGameState.IN_GAME;
+        reconnectManager.setGameState(currentGameState);
+        reconnectManager.setCurrentRoom(roomName);
+        System.out.println("State: IN_GAME (room: " + roomName + ")");
+    }
+
 
     private void startListenerThread() {
         listenerThread = new Thread(() -> {
@@ -154,7 +327,12 @@ public class ClientConnection {
                     System.err.println("Connection lost: " + e.getMessage());
                 }
             } finally {
-                disconnect();
+                if (connected && !inReconnectMode) {
+                    System.out.println("Listener thread ending, disconnecting...");
+                    disconnect();
+                } else {
+                    System.out.println("Listener thread ended (reconnect mode or already disconnected)");
+                }
             }
         });
         listenerThread.setDaemon(true);
@@ -169,6 +347,7 @@ public class ClientConnection {
 
             if (message == null) {
                 System.err.println("Failed to parse message: " + messageStr);
+                handleInvalidMessage("Invalid message format");
                 return;
             }
 
@@ -185,6 +364,38 @@ public class ClientConnection {
             System.err.println("Error processing message: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private void handleInvalidMessage(String reason) {
+        long now = System.currentTimeMillis();
+
+        if (lastInvalidMessageTime > 0 &&
+                (now - lastInvalidMessageTime) > INVALID_MESSAGE_RESET_TIME) {
+            invalidMessageCount.set(0);
+        }
+
+        lastInvalidMessageTime = now;
+        int count = invalidMessageCount.incrementAndGet();
+
+        System.err.println("Invalid message count: " + count + "/" + MAX_INVALID_MESSAGES);
+
+        if (count >= MAX_INVALID_MESSAGES) {
+            forceDisconnect("Protocol violation: " + reason);
+        }
+    }
+
+    private synchronized void forceDisconnect(String reason) {
+        System.err.println("FORCE DISCONNECT: " + reason);
+
+        try {
+            if (connected && out != null) {
+                sendError("Client detected protocol violation: " + reason);
+            }
+        } catch (Exception e) {
+        }
+
+        disconnect();
+        notifyConnectionState(false);
     }
 
     private boolean checkMessageSpam(Message message) {
@@ -286,8 +497,18 @@ public class ClientConnection {
         sendMessage(msg);
     }
 
+    public void sendPong(){
+        Message msg = new Message(OpCode.PONG, "");
+        sendMessage(msg);
+    }
+
     public void sendListRooms() {
         Message msg = new Message(OpCode.LIST_ROOMS, "");
+        sendMessage(msg);
+    }
+
+    public void sendError(String error){
+        Message msg = new Message(OpCode.ERROR, error);
         sendMessage(msg);
     }
 
@@ -305,6 +526,45 @@ public class ClientConnection {
         sendMessage(msg);
     }
 
+    public void sendReconnectRequest(String roomName, String playerName) {
+        String data;
+
+        if (roomName == null || roomName.isEmpty()) {
+            data = playerName;
+            System.out.println("Sending RECONNECT_REQUEST (lobby): " + playerName);
+        } else {
+            data = roomName + "," + playerName;
+            System.out.println("Sending RECONNECT_REQUEST (room): " + data);
+        }
+
+        Message msg = new Message(OpCode.RECONNECT_REQUEST, data);
+        sendMessage(msg);
+    }
+
+    public void notifyConnectionStatePublic(boolean state) {
+        notifyConnectionState(state);
+    }
+
+    public boolean isInReconnectMode() {
+        return inReconnectMode;
+    }
+
+    public HeartbeatManager getHeartbeatManager() {
+        return heartbeatManager;
+    }
+
+    private String getCurrentRoom() {
+        return reconnectManager.getCurrentRoom();
+    }
+
+    public ReconnectManager getReconnectManager() {
+        return reconnectManager;
+    }
+
+    public ReconnectManager.ClientGameState getCurrentGameState() {
+        return currentGameState;
+    }
+
     public boolean isConnected() {
         return connected && socket != null && !socket.isClosed();
     }
@@ -319,6 +579,10 @@ public class ClientConnection {
 
     public void setConnectionStateHandler(Consumer<Boolean> handler) {
         this.connectionStateHandler = handler;
+    }
+
+    public void setInReconnectMode(boolean mode) {
+        this.inReconnectMode = mode;
     }
 
     private void notifyConnectionState(boolean state) {

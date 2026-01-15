@@ -2,6 +2,7 @@ package com.checkerstcp.checkerstcp.controller;
 
 import com.checkerstcp.checkerstcp.*;
 import com.checkerstcp.checkerstcp.network.ClientManager;
+import com.checkerstcp.checkerstcp.network.ConnectionStatusDialog;
 import com.checkerstcp.checkerstcp.network.Message;
 import com.checkerstcp.checkerstcp.network.OpCode;
 import javafx.animation.FadeTransition;
@@ -78,6 +79,7 @@ public class GameController implements Initializable {
     private List<PlayerMoveItem> moveHistory = new ArrayList<>();
     private Move pendingMove;
     private int[][] deferredServerState;
+    private ConnectionStatusDialog reconnectDialog;
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
@@ -86,7 +88,9 @@ public class GameController implements Initializable {
         setupMessageHandlers();
         StackPane container = new StackPane(board);
         mainBorderPane.setCenter(container);
+        reconnectDialog = clientManager.getReconnectDialog();
 
+        setupReconnectCallbacks();
         setupBoardCallbacks();
 
         createSlideMenu();
@@ -124,12 +128,151 @@ public class GameController implements Initializable {
         });
     }
 
+    private void setupReconnectCallbacks() {
+        // Коли з'єднання втрачено
+        clientManager.setOnConnectionLost(() -> {
+            Platform.runLater(() -> {
+                System.out.println("⚠️ Connection lost in game!");
+
+                // Показати діалог реконекту
+                reconnectDialog.show();
+
+                // Опціонально: призупинити локальні анімації
+                if (board != null) {
+                    board.setDisable(true);
+                }
+            });
+        });
+
+        // Коли з'єднання відновлено
+        clientManager.setOnReconnectSuccess(() -> {
+            Platform.runLater(() -> {
+                System.out.println("✅ Connection restored in game!");
+
+                // Відновити управління дошкою
+                if (board != null) {
+                    board.setDisable(false);
+                }
+
+                // Діалог автоматично закриється
+            });
+        });
+
+        // Коли реконект не вдався
+        clientManager.setOnReconnectFailed(() -> {
+            Platform.runLater(() -> {
+                System.err.println("❌ Reconnect failed in game!");
+
+                // Показати повідомлення та повернутися до лобі
+                new GameAlertDialog(
+                        AlertVariant.ERROR,
+                        "З'єднання втрачено",
+                        "Не вдалося відновити з'єднання з сервером.\n" +
+                                "Ви будете повернуті до лобі.",
+                        this::returnToLobby,
+                        null,
+                        false
+                ).show();
+            });
+        });
+
+        // Налаштувати кнопку скасування в діалозі
+        reconnectDialog.setOnCancel(() -> {
+            Platform.runLater(() -> {
+                // Зупинити реконект та повернутися до лобі
+                clientManager.disconnect();
+                returnToLobby();
+            });
+        });
+    }
+
     private void setupMessageHandlers() {
         clientManager.registerMessageHandler(OpCode.GAME_START, this::handleGameStart);
         clientManager.registerMessageHandler(OpCode.GAME_STATE, this::handleGameState);
         clientManager.registerMessageHandler(OpCode.INVALID_MOVE, this::handleInvalidMove);
         clientManager.registerMessageHandler(OpCode.GAME_END, this::handleGameEnd);
         clientManager.registerMessageHandler(OpCode.ROOM_LEFT, this::handlePlayerLeft);
+        clientManager.registerMessageHandler(OpCode.PLAYER_DISCONNECTED, this::handleOpponentDisconnected);
+        clientManager.registerMessageHandler(OpCode.PLAYER_RECONNECTED, this::handleOpponentReconnected);
+        clientManager.registerMessageHandler(OpCode.GAME_PAUSED, this::handleGamePaused);
+        clientManager.registerMessageHandler(OpCode.GAME_RESUMED, this::handleGameResumed);
+    }
+
+    private void handleOpponentDisconnected(Message message) {
+        Platform.runLater(() -> {
+            String[] parts = message.getData().split(",");
+            if (parts.length >= 2) {
+                String roomName = parts[0];
+                String playerName = parts[1];
+
+                System.out.println("Opponent " + playerName + " disconnected");
+
+                reconnectDialog.showOpponentDisconnected(playerName);
+
+                if (board != null) {
+                    board.setDisable(true);
+                }
+
+                netStateLbl.setText("Čekání na protivníka.");
+                netStateLbl.setStyle("-fx-text-fill: orange;");
+            }
+        });
+    }
+
+    private void handleOpponentReconnected(Message message) {
+        Platform.runLater(() -> {
+            String[] parts = message.getData().split(",");
+            if (parts.length >= 2) {
+                String roomName = parts[0];
+                String playerName = parts[1];
+
+                System.out.println("Opponent " + playerName + " reconnected");
+
+                reconnectDialog.showOpponentReconnected(playerName);
+
+                // Відновити UI
+                if (board != null) {
+                    board.setDisable(false);
+                }
+
+                updateTurnIndicator();
+            }
+        });
+    }
+
+    private void handleGamePaused(Message message) {
+        Platform.runLater(() -> {
+            String roomName = message.getData();
+            System.out.println("Game paused in room: " + roomName);
+
+            netStateLbl.setText("Hra pozastavena");
+            netStateLbl.setStyle("-fx-text-fill: orange;");
+
+            if (board != null) {
+                board.setDisable(true);
+            }
+        });
+    }
+
+    private void handleGameResumed(Message message) {
+        Platform.runLater(() -> {
+            String roomName = message.getData();
+            System.out.println("Game resumed in room: " + roomName);
+
+            netStateLbl.setText("Hra obnovena!");
+            netStateLbl.setStyle("-fx-text-fill: green;");
+
+            if (board != null) {
+                board.setDisable(false);
+            }
+
+            updateTurnIndicator();
+
+            javafx.animation.PauseTransition pause =
+                    new javafx.animation.PauseTransition(javafx.util.Duration.seconds(2));
+            pause.setOnFinished(e -> updateTurnIndicator());
+            pause.play();
+        });
     }
 
     private void handleGameStart(Message message) {
@@ -828,6 +971,19 @@ public class GameController implements Initializable {
         clientManager.unregisterMessageHandler(OpCode.INVALID_MOVE);
         clientManager.unregisterMessageHandler(OpCode.GAME_END);
         clientManager.unregisterMessageHandler(OpCode.ROOM_LEFT);
+
+        clientManager.unregisterMessageHandler(OpCode.PLAYER_DISCONNECTED);
+        clientManager.unregisterMessageHandler(OpCode.PLAYER_RECONNECTED);
+        clientManager.unregisterMessageHandler(OpCode.GAME_PAUSED);
+        clientManager.unregisterMessageHandler(OpCode.GAME_RESUMED);
+
+        clientManager.setOnConnectionLost(null);
+        clientManager.setOnReconnectSuccess(null);
+        clientManager.setOnReconnectFailed(null);
+
+        if (reconnectDialog != null && reconnectDialog.isShowing()) {
+            reconnectDialog.hide();
+        }
     }
 
     public PieceColor getMyColor() {

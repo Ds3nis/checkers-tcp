@@ -2,6 +2,7 @@ package com.checkerstcp.checkerstcp.controller;
 
 import com.checkerstcp.checkerstcp.*;
 import com.checkerstcp.checkerstcp.network.ClientManager;
+import com.checkerstcp.checkerstcp.network.ConnectionStatusDialog;
 import com.checkerstcp.checkerstcp.network.Message;
 import com.checkerstcp.checkerstcp.network.OpCode;
 import javafx.application.Platform;
@@ -59,6 +60,8 @@ public class LobbyController implements Initializable {
     private int[][] pendingBoardState;
     private boolean waitingForGameState = false;
 
+    private ConnectionStatusDialog reconnectDialog;
+
     public LobbyController() {
         clientManager = ClientManager.getInstance();
     }
@@ -71,6 +74,9 @@ public class LobbyController implements Initializable {
         bindConnectionState();
 
         setupMessageHandlers();
+
+        reconnectDialog = clientManager.getReconnectDialog();
+        setupReconnectCallbacks();
 
         setupButtonHandlers();
 
@@ -176,6 +182,38 @@ public class LobbyController implements Initializable {
         clientManager.registerMessageHandler(OpCode.GAME_STATE, this::handleGameState);
 
         clientManager.addRoomListUpdateHandler(this::updateRoomList);
+    }
+
+    private void setupReconnectCallbacks() {
+        clientManager.setOnConnectionLost(() -> {
+            Platform.runLater(() -> {
+                System.out.println("⚠️ Connection lost in lobby!");
+                reconnectDialog.show();
+            });
+        });
+
+        clientManager.setOnReconnectSuccess(() -> {
+            Platform.runLater(() -> {
+                System.out.println("✅ Connection restored in lobby!");
+                requestRoomsList();
+            });
+        });
+
+        clientManager.setOnReconnectFailed(() -> {
+            Platform.runLater(() -> {
+                System.err.println("Reconnect failed in lobby!");
+
+                showError(
+                        "Připojení ztraceno",
+                        "Nepodařilo se obnovit připojení k serveru.\n" +
+                                "Zkontrolujte prosím připojení k internetu."
+                );
+            });
+        });
+
+        reconnectDialog.setOnCancel(() -> {
+            clientManager.disconnect();
+        });
     }
 
     private void setupButtonHandlers() {
@@ -305,6 +343,7 @@ public class LobbyController implements Initializable {
         Platform.runLater(() -> {
             showInfo("Úspěch", "Úspěšně připojeno k serveru!");
         });
+
     }
 
     private void handleLoginFail(Message message) {
@@ -348,7 +387,6 @@ public class LobbyController implements Initializable {
     private void handleRoomsList(Message message) {
         Platform.runLater(() -> {
             System.out.println("Received rooms list from server");
-            // ClientManager вже оброблює це повідомлення
         });
     }
 
@@ -509,6 +547,14 @@ public class LobbyController implements Initializable {
         clientManager.unregisterMessageHandler(OpCode.ROOM_FULL);
         clientManager.unregisterMessageHandler(OpCode.ROOMS_LIST);
         clientManager.unregisterMessageHandler(OpCode.GAME_START);
+
+        clientManager.setOnConnectionLost(null);
+        clientManager.setOnReconnectSuccess(null);
+        clientManager.setOnReconnectFailed(null);
+
+        if (reconnectDialog != null && reconnectDialog.isShowing()) {
+            reconnectDialog.hide();
+        }
     }
 
     private void openGameView(String roomName, String player1, String player2,

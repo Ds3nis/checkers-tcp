@@ -35,9 +35,17 @@ public class ClientManager {
     private Map<OpCode, Consumer<Message>> messageHandlers = new HashMap<>();
     private List<Consumer<List<GameRoom>>> roomListUpdateHandlers = new ArrayList<>();
 
+    private ConnectionStatusDialog reconnectDialog;
+
+    private Runnable onConnectionLost;
+    private Runnable onReconnectSuccess;
+    private Runnable onReconnectFailed;
+
     private ClientManager() {
         connection = new ClientConnection();
+        reconnectDialog = new ConnectionStatusDialog();
         setupConnectionHandlers();
+        setupReconnectHandlers();
     }
 
     public static synchronized ClientManager getInstance() {
@@ -66,6 +74,83 @@ public class ClientManager {
         });
     }
 
+    private void setupReconnectHandlers() {
+        ReconnectManager reconnectManager = connection.getReconnectManager();
+
+        // Оновлення статусу реконекту
+        reconnectManager.setOnStatusUpdate(status -> {
+            int attempts = reconnectManager.getReconnectAttempts();
+            long duration = reconnectManager.getDisconnectDuration() / 1000;
+
+            if (!reconnectDialog.isShowing()) {
+                reconnectDialog.show();
+            }
+
+            Platform.runLater(() -> {
+                reconnectDialog.updateConnectionStatus(status, attempts, duration);
+
+                switch (status) {
+                    case SHORT_DISCONNECT:
+                        statusMessage.set("Přepojování... (pokus " + attempts + ")");
+                        break;
+                    case LONG_DISCONNECT:
+                        statusMessage.set("Dlouhodobé odpojení (" + duration + " sekund)");
+                        break;
+                    case RECONNECTED:
+                        statusMessage.set("Spojení obnoveno!");
+                        break;
+                    case CRITICAL_TIMEOUT:
+                        statusMessage.set("Připojení ztraceno (časový limit)");
+                        if (onReconnectFailed != null) {
+                            onReconnectFailed.run();
+                        }
+                        break;
+                }
+            });
+        });
+
+        reconnectManager.setOnReconnectSuccess(() -> {
+            Platform.runLater(() -> {
+                System.out.println("Reconnect successful");
+                if (onReconnectSuccess != null) {
+                    onReconnectSuccess.run();
+                }
+            });
+        });
+
+        reconnectManager.setOnReconnectFailed(() -> {
+            Platform.runLater(() -> {
+                System.err.println("Reconnect failed");
+                if (onReconnectFailed != null) {
+                    onReconnectFailed.run();
+                }
+            });
+        });
+
+        reconnectDialog.setOnCancel(() -> {
+            reconnectManager.stopReconnect();
+            if (onReconnectFailed != null) {
+                onReconnectFailed.run();
+            }
+        });
+
+        reconnectDialog.setOnManualReconnect(() -> {
+            System.out.println("Manual reconnect triggered from UI");
+            boolean success = reconnectManager.manualReconnect();
+
+            if (!success) {
+                System.err.println("Manual reconnect failed");
+            }
+        });
+
+        reconnectDialog.setOnCancel(() -> {
+            reconnectManager.stopReconnect();
+            if (onReconnectFailed != null) {
+                onReconnectFailed.run();
+            }
+        });
+    }
+
     /**
      * Підключення до сервера
      */
@@ -86,7 +171,9 @@ public class ClientManager {
         connection.disconnect();
         currentRoom = null;
         availableRooms.clear();
+        reconnectDialog.hide();
     }
+
 
     /**
      * Обробка вхідних повідомлень
@@ -106,6 +193,7 @@ public class ClientManager {
                     // Автоматично запитуємо список кімнат (якщо сервер підтримує)
                     requestRoomsList();
                 });
+                connection.transitionToLobby();
                 break;
 
             case LOGIN_FAIL:
@@ -117,12 +205,17 @@ public class ClientManager {
 
             case ROOM_JOINED:
                 parseRoomJoined(message.getData());
+                connection.transitionToRoomWaiting(currentRoom);
                 break;
 
             case ROOM_FAIL:
                 Platform.runLater(() -> {
                     statusMessage.set("Room operation failed: " + message.getData());
                 });
+                break;
+
+            case ROOM_LEFT:
+                connection.transitionToLobby();
                 break;
 
             case ERROR:
@@ -132,7 +225,12 @@ public class ClientManager {
                 break;
 
             case PONG:
-                System.out.println("Pong received - connection alive");
+                connection.getHeartbeatManager().onPongReceived();
+                break;
+
+            case PING:
+                System.out.println("Ping received from server");
+                connection.sendPong();
                 break;
 
             case ROOM_CREATED:
@@ -142,7 +240,117 @@ public class ClientManager {
             case ROOMS_LIST:
                 handleRoomsList(message);
                 break;
+
+            case PLAYER_DISCONNECTED:
+                handlePlayerDisconnected(message);
+                break;
+
+            case PLAYER_RECONNECTED:
+                handlePlayerReconnected(message);
+                break;
+
+            case GAME_START:
+                connection.transitionToGame(currentRoom);
+                break;
+
+            case GAME_END:
+                connection.transitionToLobby();
+                break;
+
+            case GAME_PAUSED:
+                handleGamePaused(message);
+                break;
+
+            case GAME_RESUMED:
+                handleGameResumed(message);
+                break;
+
+            case RECONNECT_OK:
+                handleReconnectOk(message);
+                break;
+
+            case RECONNECT_FAIL:
+                handleReconnectFail(message);
+                break;
         }
+    }
+
+    private void handleConnectionLost() {
+        System.err.println("Connection lost detected in ClientManager");
+
+        reconnectDialog.show();
+
+        if (onConnectionLost != null) {
+            onConnectionLost.run();
+        }
+    }
+
+    private void handlePlayerDisconnected(Message message) {
+        String[] parts = message.getData().split(",");
+        if (parts.length >= 2) {
+            String roomName = parts[0];
+            String playerName = parts[1];
+
+            Platform.runLater(() -> {
+                System.out.println("Player " + playerName + " disconnected from room " + roomName);
+                reconnectDialog.showOpponentDisconnected(playerName);
+                statusMessage.set("Soupeř se odpojil. Čekáme na jeho návrat...");
+            });
+        }
+    }
+
+    private void handlePlayerReconnected(Message message) {
+        String[] parts = message.getData().split(",");
+        if (parts.length >= 2) {
+            String roomName = parts[0];
+            String playerName = parts[1];
+
+            Platform.runLater(() -> {
+                System.out.println("Player " + playerName + " reconnected to room " + roomName);
+                reconnectDialog.showOpponentReconnected(playerName);
+                statusMessage.set("Soupeř se vrátil. Hra pokračuje!");
+            });
+        }
+    }
+
+
+    private void handleGamePaused(Message message) {
+        Platform.runLater(() -> {
+            System.out.println("Game paused in room: " + message.getData());
+            statusMessage.set("Hra byla pozastavena");
+        });
+    }
+
+    private void handleGameResumed(Message message) {
+        Platform.runLater(() -> {
+            System.out.println("Game resumed in room: " + message.getData());
+            statusMessage.set("Hra obnovena!");
+        });
+    }
+
+    private void handleReconnectOk(Message message) {
+        Platform.runLater(() -> {
+            String roomName = message.getData();
+            System.out.println("Successfully reconnected to room: " + roomName);
+            currentRoom = roomName;
+            statusMessage.set("Připojeno ke hře: " + roomName);
+            reconnectDialog.hide();
+
+            connection.getReconnectManager().confirmReconnectSuccess();
+        });
+    }
+
+    private void handleReconnectFail(Message message) {
+        Platform.runLater(() -> {
+            System.err.println("Failed to reconnect to game: " + message.getData());
+            statusMessage.set("Nepodařilo se obnovit hru");
+
+            connection.getReconnectManager().confirmReconnectFailure();
+
+            if (onReconnectFailed != null) {
+                onReconnectFailed.run();
+            }
+        });
     }
 
     private void handleRoomCreated(Message message) {
@@ -155,7 +363,6 @@ public class ClientManager {
     private void handleRoomsList(Message message) {
         Platform.runLater(() -> {
             try {
-                // Парсинг списку кімнат з JSON
                 // Формат: [{"id":1,"name":"Room1","players":1,"status":"waiting"},...]
                 List<GameRoom> rooms = parseRoomsList(message.getData());
                 availableRooms = rooms;
@@ -233,9 +440,6 @@ public class ClientManager {
     }
 
 
-    /**
-     * Парсинг інформації про приєднання до кімнати
-     */
     private void parseRoomJoined(String data) {
         // Формат: room_name,players_count
         String[] parts = data.split(",");
@@ -247,10 +451,6 @@ public class ClientManager {
         }
     }
 
-    /**
-     * Запит списку кімнат (поки що емуляція, потрібна підтримка на сервері)
-     * TODO: Додати на сервер операцію LIST_ROOMS
-     */
 
     public void requestRoomsList() {
         if (connection.isConnected()) {
@@ -273,7 +473,7 @@ public class ClientManager {
         }
     }
 
-    // ========== API методи ==========
+    // ========== API methods ==========
 
     public void createRoom(String roomName) {
         if (!connection.isConnected()) {
@@ -344,6 +544,19 @@ public class ClientManager {
 
     public void removeRoomListUpdateHandler(Consumer<List<GameRoom>> handler) {
         roomListUpdateHandlers.remove(handler);
+
+    }
+
+    public void setOnConnectionLost(Runnable callback) {
+        this.onConnectionLost = callback;
+    }
+
+    public void setOnReconnectSuccess(Runnable callback) {
+        this.onReconnectSuccess = callback;
+    }
+
+    public void setOnReconnectFailed(Runnable callback) {
+        this.onReconnectFailed = callback;
     }
 
     // ========== Геттери та Properties ==========
@@ -370,5 +583,9 @@ public class ClientManager {
 
     public List<GameRoom> getAvailableRooms() {
         return new ArrayList<>(availableRooms);
+    }
+
+    public ConnectionStatusDialog getReconnectDialog() {
+        return reconnectDialog;
     }
 }
