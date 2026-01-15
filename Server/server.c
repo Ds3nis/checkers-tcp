@@ -390,7 +390,6 @@ void handle_player_long_disconnect(Server *server, Client *client) {
     printf("⏱️ Player %s long disconnect in room %s\n",
            client->client_id, room->name);
 
-    // Визначити переможця
     char *winner = NULL;
     if (strcmp(room->player1, client->client_id) == 0) {
         winner = room->player2;
@@ -398,10 +397,8 @@ void handle_player_long_disconnect(Server *server, Client *client) {
         winner = room->player1;
     }
 
-    // Завершити гру
     room_finish_game(room, "opponent_timeout");
 
-    // Повідомити переможця
     if (winner[0] != '\0') {
         Client *winner_client = find_client(server, winner);
         if (winner_client && winner_client->state == CLIENT_STATE_CONNECTED) {
@@ -476,9 +473,7 @@ void handle_reconnect_request(Server *server, Client *client, const char *data) 
     Client *old_client = NULL;
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (server->clients[i].logged_in &&
-            strcmp(server->clients[i].client_id, player_name) == 0 &&
-            (server->clients[i].state == CLIENT_STATE_DISCONNECTED ||
-             server->clients[i].state == CLIENT_STATE_TIMEOUT)) {
+            strcmp(server->clients[i].client_id, player_name) == 0) {
             old_client = &server->clients[i];
             break;
         }
