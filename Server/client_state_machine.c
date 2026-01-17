@@ -33,6 +33,7 @@ AllowedOperations get_allowed_operations(ClientGameState state) {
             ops.allowed_ops[ops.count++] = OP_PONG;
             ops.allowed_ops[ops.count++] = OP_PING;
             ops.allowed_ops[ops.count++] = OP_RECONNECT_REQUEST;
+            ops.allowed_ops[ops.count++] = OP_ERROR;
             break;
 
         case CLIENT_GAME_STATE_IN_LOBBY:
@@ -42,6 +43,7 @@ AllowedOperations get_allowed_operations(ClientGameState state) {
             ops.allowed_ops[ops.count++] = OP_PONG;
             ops.allowed_ops[ops.count++] = OP_PING;
             ops.allowed_ops[ops.count++] = OP_RECONNECT_REQUEST;
+            ops.allowed_ops[ops.count++] = OP_ERROR;
             break;
 
         case CLIENT_GAME_STATE_IN_ROOM_WAITING:
@@ -51,6 +53,7 @@ AllowedOperations get_allowed_operations(ClientGameState state) {
             ops.allowed_ops[ops.count++] = OP_PONG;
             ops.allowed_ops[ops.count++] = OP_PING;
             ops.allowed_ops[ops.count++] = OP_RECONNECT_REQUEST;
+            ops.allowed_ops[ops.count++] = OP_ERROR;
             break;
 
         case CLIENT_GAME_STATE_IN_GAME:
@@ -61,6 +64,7 @@ AllowedOperations get_allowed_operations(ClientGameState state) {
             ops.allowed_ops[ops.count++] = OP_PONG;
             ops.allowed_ops[ops.count++] = OP_PING;
             ops.allowed_ops[ops.count++] = OP_RECONNECT_REQUEST;
+            ops.allowed_ops[ops.count++] = OP_ERROR;
             break;
     }
 
@@ -79,9 +83,8 @@ bool is_operation_allowed(ClientGameState state, OpCode op) {
     return false;
 }
 
-// Змінити стан клієнта
 void transition_client_state(Client *client, ClientGameState new_state) {
-    printf("🔄 Client %s: %s → %s\n",
+    printf("Client %s: %s → %s\n",
            client->client_id[0] ? client->client_id : "anonymous",
            client_game_state_to_string(client->game_state),
            client_game_state_to_string(new_state));

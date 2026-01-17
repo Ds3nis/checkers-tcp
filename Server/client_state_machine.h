@@ -12,10 +12,10 @@
 typedef struct Client Client;
 
 typedef enum {
-    CLIENT_GAME_STATE_NOT_LOGGED_IN,    // Ще не залогінений
-    CLIENT_GAME_STATE_IN_LOBBY,         // Залогінений, в лобі
-    CLIENT_GAME_STATE_IN_ROOM_WAITING,  // В кімнаті, чекає іншого гравця
-    CLIENT_GAME_STATE_IN_GAME           // В активній грі
+    CLIENT_GAME_STATE_NOT_LOGGED_IN,
+    CLIENT_GAME_STATE_IN_LOBBY,
+    CLIENT_GAME_STATE_IN_ROOM_WAITING,
+    CLIENT_GAME_STATE_IN_GAME
 } ClientGameState;
 
 

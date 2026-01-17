@@ -5,7 +5,6 @@
 
 
 void init_game(Game *game, const char *player1, const char *player2) {
-    // Initialize board (like in Java example)
     int initial_board[BOARD_SIZE][BOARD_SIZE] = {
         {3, 0, 3, 0, 3, 0, 3, 0},
         {0, 3, 0, 3, 0, 3, 0, 3},
@@ -53,7 +52,7 @@ char* game_board_to_json(const Game *game) {
 }
 
 void rotate_board(const Game *game, int rotated[BOARD_SIZE][BOARD_SIZE]) {
-    // Rotate 180 degrees and swap colors (like in Java getRotatedBoard)
+    // Rotate 180 degrees and swap colors
     for (int i = 0; i < BOARD_SIZE; i++) {
         for (int j = 0; j < BOARD_SIZE; j++) {
             int piece = game->board[BOARD_SIZE - 1 - i][BOARD_SIZE - 1 - j];
@@ -67,16 +66,12 @@ void rotate_board(const Game *game, int rotated[BOARD_SIZE][BOARD_SIZE]) {
     }
 }
 
-/**
- * Перевірка чи є шашка дамкою
- */
+
 bool is_king(int piece) {
     return piece == WHITE_KING || piece == BLACK_KING;
 }
 
-/**
- * Перевірка чи шашка належить кольору
- */
+
 bool piece_belongs_to_color(int piece, PlayerColor color) {
     if (color == COLOR_WHITE) {
         return piece == WHITE_PIECE || piece == WHITE_KING;
@@ -87,25 +82,25 @@ bool piece_belongs_to_color(int piece, PlayerColor color) {
 
 bool validate_single_step(const Game *game, int from_row, int from_col,
                          int to_row, int to_col, const char *player) {
-    printf("  Validating step: (%d,%d) -> (%d,%d)\n", from_row, from_col, to_row, to_col);
+    printf(" Validating step: (%d,%d) -> (%d,%d)\n", from_row, from_col, to_row, to_col);
 
     // Перевірка меж
     if (from_row < 0 || from_row >= BOARD_SIZE || from_col < 0 || from_col >= BOARD_SIZE ||
         to_row < 0 || to_row >= BOARD_SIZE || to_col < 0 || to_col >= BOARD_SIZE) {
-        printf("  ❌ Out of bounds\n");
+        printf("Out of bounds\n");
         return false;
     }
 
     // Ціль порожня
     if (game->board[to_row][to_col] != EMPTY) {
-        printf("  ❌ Destination not empty\n");
+        printf("Destination not empty\n");
         return false;
     }
 
     // Шашка існує
     int piece = game->board[from_row][from_col];
     if (piece == EMPTY) {
-        printf("  ❌ Source empty\n");
+        printf("Source empty\n");
         return false;
     }
 
@@ -115,7 +110,7 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
 
     // Належність шашки
     if (!piece_belongs_to_color(piece, player_color)) {
-        printf("  ❌ Wrong color (piece: %d, player: %s)\n", piece, player);
+        printf("Wrong color (piece: %d, player: %s)\n", piece, player);
         return false;
     }
 
@@ -125,7 +120,7 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
 
     // Діагональ
     if (abs_row_diff != col_diff) {
-        printf("  ❌ Not diagonal (row_diff: %d, col_diff: %d)\n", abs_row_diff, col_diff);
+        printf("Not diagonal (row_diff: %d, col_diff: %d)\n", abs_row_diff, col_diff);
         return false;
     }
 
@@ -145,7 +140,7 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
 
             if (check_piece != EMPTY) {
                 if (piece_belongs_to_color(check_piece, player_color)) {
-                    printf("  ❌ Own piece blocks at (%d,%d)\n", check_row, check_col);
+                    printf("Own piece blocks at (%d,%d)\n", check_row, check_col);
                     return false;
                 }
 
@@ -154,7 +149,7 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
                 last_enemy_col = check_col;
 
                 if (enemies > 1) {
-                    printf("  ❌ Multiple enemies in path\n");
+                    printf("Multiple enemies in path\n");
                     return false;
                 }
             }
@@ -162,10 +157,10 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
 
         // Дамка може: 0 ворогів (звичайний хід) або 1 ворог (біття)
         if (enemies == 0) {
-            printf("  ✅ Valid king move (distance: %d)\n", abs_row_diff);
+            printf("Valid king move (distance: %d)\n", abs_row_diff);
             return true;
         } else if (enemies == 1) {
-            printf("  ✅ Valid king capture at (%d,%d)\n", last_enemy_row, last_enemy_col);
+            printf("Valid king capture at (%d,%d)\n", last_enemy_row, last_enemy_col);
             return true;
         }
 
@@ -179,14 +174,14 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
         // Звичайний хід - перевірити напрямок
         if (piece == WHITE_PIECE && row_diff == -1) {
             // Біла шашка може ходити тільки вгору
-            printf("  ✅ Valid WHITE move forward\n");
+            printf("Valid WHITE move forward\n");
             return true;
         } else if (piece == BLACK_PIECE && row_diff == 1) {
             // Чорна шашка може ходити тільки вниз
-            printf("  ✅ Valid BLACK move forward\n");
+            printf("Valid BLACK move forward\n");
             return true;
         } else {
-            printf("  ❌ Regular piece cannot move backward\n");
+            printf("Regular piece cannot move backward\n");
             return false;
         }
     }
@@ -199,7 +194,7 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
         int mid_piece = game->board[mid_row][mid_col];
 
         if (mid_piece == EMPTY) {
-            printf("  ❌ No piece to capture at (%d,%d)\n", mid_row, mid_col);
+            printf("No piece to capture at (%d,%d)\n", mid_row, mid_col);
             return false;
         }
 
@@ -212,17 +207,17 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
         }
 
         if (is_enemy) {
-            printf("  ✅ Valid capture (can jump backward!): captured piece at (%d,%d)\n",
+            printf("Valid capture (can jump backward!): captured piece at (%d,%d)\n",
                    mid_row, mid_col);
             return true;
         } else {
-            printf("  ❌ Cannot capture own piece at (%d,%d)\n", mid_row, mid_col);
+            printf("Cannot capture own piece at (%d,%d)\n", mid_row, mid_col);
             return false;
         }
     }
 
     // Інші відстані недозволені для звичайних шашок
-    printf("  ❌ Invalid move distance (%d) for regular piece\n", abs_row_diff);
+    printf("Invalid move distance (%d) for regular piece\n", abs_row_diff);
     return false;
 }
 
@@ -231,7 +226,7 @@ bool validate_move(const Game *game, int from_row, int from_col,
     printf("\n=== VALIDATE MOVE ===\n");
 
     if (strcmp(game->current_turn, player) != 0) {
-        printf("❌ Not player's turn\n");
+        printf("Not player's turn\n");
         return false;
     }
 
@@ -240,7 +235,7 @@ bool validate_move(const Game *game, int from_row, int from_col,
 
 void apply_single_step(Game *game, int from_row, int from_col, int to_row, int to_col) {
     int piece = game->board[from_row][from_col];
-    printf("  Applying: (%d,%d)->(%d,%d)\n", from_row, from_col, to_row, to_col);
+    printf("Applying: (%d,%d)->(%d,%d)\n", from_row, from_col, to_row, to_col);
 
     game->board[to_row][to_col] = piece;
     game->board[from_row][from_col] = EMPTY;
