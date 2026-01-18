@@ -120,23 +120,22 @@ public class ReconnectManager {
         long disconnectDuration = System.currentTimeMillis() - disconnectStartTime;
         long disconnectSeconds = disconnectDuration / 1000;
 
-        System.out.println("🔄 Reconnect attempt #" + attempt + "/" +
+        System.out.println("Reconnect attempt #" + attempt + "/" +
                 MAX_AUTO_RECONNECT_ATTEMPTS + " (disconnected for " +
                 disconnectSeconds + "s)");
 
         // ========== ПЕРЕХІД ДО СТАНУ "LONG_DISCONNECT" ==========
         if (disconnectSeconds >= SHORT_DISCONNECT_THRESHOLD_SEC) {
-            System.out.println("⏱️ Transition to LONG_DISCONNECT (40+ seconds)");
+            System.out.println("Transition to LONG_DISCONNECT (40+ seconds)");
             notifyStatus(ReconnectStatus.LONG_DISCONNECT, attempt, disconnectSeconds);
 
-            // Зупинити автоматичні спроби
             stopReconnect();
             return;
         }
 
         // ========== АВТОМАТИЧНІ СПРОБИ (0-40 СЕКУНД) ==========
         if (attempt > MAX_AUTO_RECONNECT_ATTEMPTS) {
-            System.out.println("⏱️ Max auto-reconnect attempts reached");
+            System.out.println("Max auto-reconnect attempts reached");
             notifyStatus(ReconnectStatus.LONG_DISCONNECT, attempt, disconnectSeconds);
             stopReconnect();
             return;
@@ -152,7 +151,7 @@ public class ReconnectManager {
             // Продовжити спроби (якщо ще не досягли 40 секунд)
             if (attempt < MAX_AUTO_RECONNECT_ATTEMPTS) {
                 int nextDelay = calculateNextDelay(attempt);
-                System.out.println("⏳ Next attempt in " + (nextDelay / 1000) + "s");
+                System.out.println("Next attempt in " + (nextDelay / 1000) + "s");
                 scheduleNextAttempt(nextDelay);
             } else {
                 notifyStatus(ReconnectStatus.LONG_DISCONNECT, attempt, disconnectSeconds);
@@ -262,7 +261,7 @@ public class ReconnectManager {
     }
 
     private void handleReconnectSuccess() {
-        System.out.println("✅ ========== RECONNECTION SUCCESSFUL ==========");
+        System.out.println("========== RECONNECTION SUCCESSFUL ==========");
 
         stopReconnect();
         reconnectAttempts.set(0);
@@ -285,10 +284,10 @@ public class ReconnectManager {
      * Ручна спроба реконекту (викликається кнопкою в UI)
      */
     public synchronized boolean manualReconnect() {
-        System.out.println("🔘 Manual reconnect attempt...");
+        System.out.println("Manual reconnect attempt...");
 
         if (serverHost == null || clientId == null) {
-            System.err.println("❌ No connection data");
+            System.err.println("No connection data");
             return false;
         }
 
@@ -297,7 +296,7 @@ public class ReconnectManager {
 
         // Перевірити чи не минуло критичного часу (80 секунд)
         if (disconnectSeconds >= LONG_DISCONNECT_THRESHOLD_SEC) {
-            System.err.println("❌ Disconnect duration exceeded critical threshold");
+            System.err.println("Disconnect duration exceeded critical threshold");
             notifyStatus(ReconnectStatus.CRITICAL_TIMEOUT, 0, disconnectSeconds);
             return false;
         }
@@ -308,7 +307,7 @@ public class ReconnectManager {
             handleReconnectSuccess();
             return true;
         } else {
-            System.err.println("❌ Manual reconnect failed");
+            System.err.println("Manual reconnect failed");
             return false;
         }
     }

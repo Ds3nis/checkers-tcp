@@ -97,7 +97,6 @@ public class GameController implements Initializable {
         burgerMenuBtn.setOnAction(e -> toggleMenu());
 
         setupGameInfoPanels();
-
         updateConnectionStatus();
 
         board.setOnAnimationFinished(() -> {
@@ -129,46 +128,36 @@ public class GameController implements Initializable {
     }
 
     private void setupReconnectCallbacks() {
-        // Коли з'єднання втрачено
         clientManager.setOnConnectionLost(() -> {
             Platform.runLater(() -> {
-                System.out.println("⚠️ Connection lost in game!");
-
-                // Показати діалог реконекту
+                System.out.println("Connection lost in game!");
                 reconnectDialog.show();
 
-                // Опціонально: призупинити локальні анімації
                 if (board != null) {
                     board.setDisable(true);
                 }
             });
         });
 
-        // Коли з'єднання відновлено
+
         clientManager.setOnReconnectSuccess(() -> {
             Platform.runLater(() -> {
-                System.out.println("✅ Connection restored in game!");
-
-                // Відновити управління дошкою
+                System.out.println("Connection restored in game!");
                 if (board != null) {
                     board.setDisable(false);
                 }
-
-                // Діалог автоматично закриється
             });
         });
 
-        // Коли реконект не вдався
         clientManager.setOnReconnectFailed(() -> {
             Platform.runLater(() -> {
-                System.err.println("❌ Reconnect failed in game!");
+                System.err.println("Reconnect failed in game!");
 
-                // Показати повідомлення та повернутися до лобі
                 new GameAlertDialog(
                         AlertVariant.ERROR,
-                        "З'єднання втрачено",
-                        "Не вдалося відновити з'єднання з сервером.\n" +
-                                "Ви будете повернуті до лобі.",
+                        "Připojení ztraceno",
+                        "Nepodařilo se obnovit připojení k serveru.\n" +
+                                "Budete přesměrováni zpět do lobby.",
                         this::returnToLobby,
                         null,
                         false
@@ -176,10 +165,8 @@ public class GameController implements Initializable {
             });
         });
 
-        // Налаштувати кнопку скасування в діалозі
         reconnectDialog.setOnCancel(() -> {
             Platform.runLater(() -> {
-                // Зупинити реконект та повернутися до лобі
                 clientManager.disconnect();
                 returnToLobby();
             });
@@ -213,7 +200,7 @@ public class GameController implements Initializable {
                     board.setDisable(true);
                 }
 
-                netStateLbl.setText("Čekání na protivníka.");
+                netStateLbl.setText("Čekání na protivníka");
                 netStateLbl.setStyle("-fx-text-fill: orange;");
             }
         });
@@ -230,7 +217,6 @@ public class GameController implements Initializable {
 
                 reconnectDialog.showOpponentReconnected(playerName);
 
-                // Відновити UI
                 if (board != null) {
                     board.setDisable(false);
                 }
@@ -298,7 +284,6 @@ public class GameController implements Initializable {
                 roomNameLbl.setText("Pokoj: " + roomName);
                 updateTurnIndicator();
 
-                // Оновити інформаційні панелі
                 updateInfoPanels();
 
                 System.out.println("Game started! My color: " + myColor + ", My turn: " + isMyTurn);
@@ -324,7 +309,7 @@ public class GameController implements Initializable {
                 }
 
                 if (board.isAnimating()) {
-                    System.out.println("⏳ Animation in progress, deferring sync");
+                    System.out.println("Animation in progress, deferring sync");
                     deferredServerState = boardState;
                     return;
                 }
@@ -342,8 +327,6 @@ public class GameController implements Initializable {
                 board.setCurrentTurn(turnColor);
 
                 updateTurnIndicator();
-
-                // Оновити кількість шашок на панелях
                 updatePiecesCount();
 
             } catch (Exception e) {
@@ -503,10 +486,12 @@ public class GameController implements Initializable {
         Position from = new Position(move.getFromRow(), move.getFromCol());
         Position to = new Position(move.getToRow(), move.getToCol());
 
+        LocalTime timestamp = LocalTime.now().withNano(0);
+
         PlayerMoveItem moveItem = new PlayerMoveItem(
                 from.toString(),
                 to.toString(),
-                LocalTime.now()
+                timestamp
         );
 
         moveHistory.add(moveItem);
@@ -616,9 +601,6 @@ public class GameController implements Initializable {
         }
     }
 
-    /**
-     * Підрахувати кількість шашок певного кольору на дошці
-     */
     private int countPieces(PieceColor color) {
         int[][] boardState = board.getBoardState();
         int count = 0;

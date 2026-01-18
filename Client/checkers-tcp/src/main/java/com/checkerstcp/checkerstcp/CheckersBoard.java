@@ -559,14 +559,13 @@ public class CheckersBoard extends GridPane {
                 move.addCapturedPosition(pos.getRow(), pos.getCol());
             }
 
-            // ✅ КОПІЮВАТИ ШЛЯХ З РЕКУРСІЇ
             for (Position pathPos : pathSoFar) {
                 move.addPathPosition(pathPos.getRow(), pathPos.getCol());
             }
 
             allMoves.add(move);
 
-            System.out.println("✅ Created king capture move:");
+            System.out.println("Created king capture move:");
             System.out.println("   Path: " + pathSoFar.size() + " positions");
         }
     }
@@ -617,10 +616,6 @@ public class CheckersBoard extends GridPane {
                     foundFurtherCapture = true;
                     visited[jumpRow][jumpCol] = true;
 
-                    // ✅ ВИДАЛЕНО дублювання single capture
-                    // Тепер ходи додаються ТІЛЬКИ в кінці ланцюжка
-
-                    // Рекурсія з оновленим шляхом
                     List<Position> newCaptured = new ArrayList<>(capturedSoFar);
                     newCaptured.add(new Position(midRow, midCol));
 
@@ -634,25 +629,23 @@ public class CheckersBoard extends GridPane {
             }
         }
 
-        // ✅ Створити хід ТІЛЬКИ якщо це кінець ланцюжка
+
         if (!foundFurtherCapture && !capturedSoFar.isEmpty()) {
             MoveType type = capturedSoFar.size() > 1 ? MoveType.MULTI_CAPTURE : MoveType.CAPTURE;
             Move move = new Move(piece.getRow(), piece.getCol(), row, col, type,
                     checkPromotion(piece, row));
 
-            // Додати всі захоплені позиції
             for (Position pos : capturedSoFar) {
                 move.addCapturedPosition(pos.getRow(), pos.getCol());
             }
 
-            // ✅ КОПІЮВАТИ ТОЧНИЙ ШЛЯХ З РЕКУРСІЇ (вже містить початок!)
             for (Position pathPos : pathSoFar) {
                 move.addPathPosition(pathPos.getRow(), pathPos.getCol());
             }
 
             allMoves.add(move);
 
-            System.out.println("✅ Created capture move:");
+            System.out.println("Created capture move:");
             System.out.println("   From: (" + piece.getRow() + "," + piece.getCol() + ")");
             System.out.println("   To: (" + row + "," + col + ")");
             System.out.println("   Captured: " + capturedSoFar.size() + " pieces");

@@ -77,7 +77,7 @@ public class ConnectionStatusDialog {
         detailsLabel.setAlignment(Pos.CENTER);
 
         // Кнопка ручного реконекту (спочатку прихована)
-        manualReconnectBtn = new Button("🔄 Zkusit znovu");
+        manualReconnectBtn = new Button("Zkusit znovu");
         manualReconnectBtn.setVisible(false);
         manualReconnectBtn.setManaged(false); // Не займає місце коли прихована
         manualReconnectBtn.setStyle("""
@@ -176,7 +176,7 @@ public class ConnectionStatusDialog {
                 Platform.runLater(() -> {
                     if (manualReconnectBtn.isVisible()) {
                         manualReconnectBtn.setDisable(false);
-                        manualReconnectBtn.setText("🔄 Zkusit znovu");
+                        manualReconnectBtn.setText("Zkusit znovu");
                     }
                 });
             }).start();
@@ -196,7 +196,6 @@ public class ConnectionStatusDialog {
             stage.centerOnScreen();
             isShowing = true;
 
-            // Анімація появи
             FadeTransition fade = new FadeTransition(Duration.millis(300), contentBox);
             fade.setFromValue(0);
             fade.setToValue(1);
@@ -258,7 +257,7 @@ public class ConnectionStatusDialog {
                 case LONG_DISCONNECT:
                     // 40-80 секунд: показати кнопку ручного реконекту
                     progressIndicator.setVisible(true);
-                    statusLabel.setText("⚠️ Dlouhé odpojení");
+                    statusLabel.setText("Dlouhé odpojení");
                     statusLabel.setStyle("""
                         -fx-font-size: 18px;
                         -fx-font-weight: bold;
@@ -274,7 +273,7 @@ public class ConnectionStatusDialog {
                     manualReconnectBtn.setVisible(true);
                     manualReconnectBtn.setManaged(true);
                     manualReconnectBtn.setDisable(false);
-                    manualReconnectBtn.setText("🔄 Zkusit znovu");
+                    manualReconnectBtn.setText("Zkusit znovu");
 
                     // Сховати кнопку скасування (або змінити на "Vrátit se do lobby")
                     cancelButton.setVisible(true);
@@ -285,7 +284,7 @@ public class ConnectionStatusDialog {
                 case CRITICAL_TIMEOUT:
                     // 80+ секунд: сервер відключив
                     progressIndicator.setVisible(false);
-                    statusLabel.setText("❌ Připojení ztraceno");
+                    statusLabel.setText("Připojení ztraceno");
                     statusLabel.setStyle("""
                         -fx-font-size: 18px;
                         -fx-font-weight: bold;
@@ -315,7 +314,7 @@ public class ConnectionStatusDialog {
 
                 case RECONNECTED:
                     progressIndicator.setVisible(false);
-                    statusLabel.setText("✅ Připojení obnoveno!");
+                    statusLabel.setText("Připojení obnoveno!");
                     statusLabel.setStyle("""
                         -fx-font-size: 18px;
                         -fx-font-weight: bold;
@@ -345,7 +344,7 @@ public class ConnectionStatusDialog {
         Platform.runLater(() -> {
             show();
             progressIndicator.setVisible(true);
-            statusLabel.setText("⏸️ Hra pozastavena");
+            statusLabel.setText("Hra pozastavena");
             statusLabel.setStyle("""
                 -fx-font-size: 18px;
                 -fx-font-weight: bold;
@@ -372,7 +371,7 @@ public class ConnectionStatusDialog {
         Platform.runLater(() -> {
             show();
             progressIndicator.setVisible(false);
-            statusLabel.setText("▶️ Hra obnovena!");
+            statusLabel.setText("Hra obnovena!");
             statusLabel.setStyle("""
                 -fx-font-size: 18px;
                 -fx-font-weight: bold;

@@ -13,7 +13,7 @@ public class BoardRotation {
             for (int j = 0; j < size; j++) {
                 int newRow = size - 1 - i;
                 int newCol = size - 1 - j;
-                rotated[newRow][newCol] = board[i][j];  // ✅ Без swapColor!
+                rotated[newRow][newCol] = board[i][j];
             }
         }
 

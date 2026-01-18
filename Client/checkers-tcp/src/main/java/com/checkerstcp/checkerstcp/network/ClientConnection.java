@@ -42,6 +42,8 @@ public class ClientConnection {
 
     private ReconnectManager.ClientGameState currentGameState;
 
+    private volatile long activeListenerThreadId = -1;
+
 
     public ClientConnection() {
         heartbeatManager = new HeartbeatManager(this);
@@ -146,10 +148,7 @@ public class ClientConnection {
             startListenerThread();
             startSenderThread();
 
-            heartbeatManager.reset();
-            heartbeatManager.start();
-
-            System.out.println("✅ TCP connection established (protocol verification pending)");
+            System.out.println("TCP connection established (protocol verification pending)");
 
             return true;
 
@@ -178,39 +177,6 @@ public class ClientConnection {
         }
     }
 
-    private boolean verifyReconnect(String room, String playerId) {
-        try {
-            sendReconnectRequest(room, playerId);
-
-            CompletableFuture<Boolean> responseFuture = new CompletableFuture<>();
-
-            // Тимчасовий обробник для перевірки відповіді
-            Consumer<Message> oldHandler = messageHandler;
-            messageHandler = msg -> {
-                if (msg.getOpCode() == OpCode.RECONNECT_OK) {
-                    responseFuture.complete(true);
-                } else if (msg.getOpCode() == OpCode.RECONNECT_FAIL) {
-                    responseFuture.complete(false);
-                }
-                if (oldHandler != null) {
-                    oldHandler.accept(msg);
-                }
-            };
-
-            try {
-                return responseFuture.get(5, TimeUnit.SECONDS);
-            } catch (TimeoutException e) {
-                System.err.println("No response from server on reconnect request");
-                return false;
-            } finally {
-                messageHandler = oldHandler;
-            }
-
-        } catch (Exception e) {
-            System.err.println("❌ Error verifying reconnect: " + e.getMessage());
-            return false;
-        }
-    }
 
     private void handleConnectionLoss() {
         if (!connected) {
@@ -283,13 +249,38 @@ public class ClientConnection {
     }
 
 
+
     private void startListenerThread() {
+        // ========== ЗУПИНИТИ СТАРИЙ THREAD ==========
+        if (listenerThread != null && listenerThread.isAlive()) {
+            System.out.println("Interrupting old listener thread...");
+            listenerThread.interrupt();
+            try {
+                listenerThread.join(1000); // Почекати максимум 1 секунду
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
         listenerThread = new Thread(() -> {
+            // ========== ЗБЕРЕГТИ ID ЦЬОГО ПОТОКУ ==========
+            long myThreadId = Thread.currentThread().getId();
+            activeListenerThreadId = myThreadId;
+
             StringBuilder messageBuffer = new StringBuilder();
             char[] buffer = new char[1024];
 
+            System.out.println("Listener thread started (ID: " + myThreadId + ")");
+
             try {
                 while (connected) {
+                    // ========== ПЕРЕВІРИТИ ЧИ ЦЕЙ THREAD ЩЕ АКТИВНИЙ ==========
+                    if (activeListenerThreadId != myThreadId) {
+                        System.out.println("Listener thread " + myThreadId +
+                                " detected newer thread, exiting gracefully");
+                        return; // Вийти без disconnect
+                    }
+
                     int charsRead = in.read(buffer, 0, buffer.length);
 
                     if (charsRead == -1) {
@@ -319,26 +310,45 @@ public class ClientConnection {
                     }
                 }
             } catch (SocketException e) {
-                if (connected) {
-                    System.err.println("Socket closed unexpectedly");
+                // ========== ПЕРЕВІРИТИ ЧИ ПОТРІБНО ВИКЛИКАТИ DISCONNECT ==========
+                if (activeListenerThreadId == myThreadId) {
+                    if (connected && !inReconnectMode) {
+                        System.err.println("Socket closed unexpectedly (thread " + myThreadId + ")");
+                    } else {
+                        System.out.println("Socket closed (reconnect in progress, thread " + myThreadId + ")");
+                    }
+                } else {
+                    System.out.println("Old socket closed (expected, thread " + myThreadId + ")");
+                    return; // Не викликати disconnect
                 }
             } catch (IOException e) {
-                if (connected) {
-                    System.err.println("Connection lost: " + e.getMessage());
+                if (activeListenerThreadId == myThreadId) {
+                    if (connected && !inReconnectMode) {
+                        System.err.println("Connection lost: " + e.getMessage() + " (thread " + myThreadId + ")");
+                    }
+                } else {
+                    System.out.println("Old connection IOException (expected, thread " + myThreadId + ")");
+                    return; // Не викликати disconnect
                 }
             } finally {
-                if (connected && !inReconnectMode) {
-                    System.out.println("Listener thread ending, disconnecting...");
-                    disconnect();
+                // ========== ТІЛЬКИ АКТИВНИЙ THREAD ВИКЛИКАЄ DISCONNECT ==========
+                if (activeListenerThreadId == myThreadId) {
+                    if (connected && !inReconnectMode) {
+                        System.out.println("Listener thread " + myThreadId + " ending, disconnecting...");
+                        disconnect();
+                    } else {
+                        System.out.println("Listener thread " + myThreadId + " ended (reconnect mode or already disconnected)");
+                    }
                 } else {
-                    System.out.println("Listener thread ended (reconnect mode or already disconnected)");
+                    System.out.println("Old listener thread " + myThreadId + " exiting gracefully");
                 }
             }
         });
         listenerThread.setDaemon(true);
-        listenerThread.setName("MessageListener");
+        listenerThread.setName("MessageListener-" + System.currentTimeMillis());
         listenerThread.start();
     }
+
 
 
     private void processMessage(String messageStr) {
@@ -428,7 +438,20 @@ public class ClientConnection {
     }
 
     private void startSenderThread() {
+        if (senderThread != null && senderThread.isAlive()) {
+            System.out.println("Interrupting old sender thread...");
+            senderThread.interrupt();
+            try {
+                senderThread.join(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
         senderThread = new Thread(() -> {
+            long myThreadId = Thread.currentThread().getId();
+            System.out.println("Sender thread started (ID: " + myThreadId + ")");
+
             try {
                 while (connected) {
                     String message = messageQueue.take();
@@ -438,11 +461,11 @@ public class ClientConnection {
                     }
                 }
             } catch (InterruptedException e) {
-                System.out.println("Sender thread interrupted");
+                System.out.println("Sender thread " + myThreadId + " interrupted");
             }
         });
         senderThread.setDaemon(true);
-        senderThread.setName("MessageSender");
+        senderThread.setName("MessageSender-" + System.currentTimeMillis());
         senderThread.start();
     }
 

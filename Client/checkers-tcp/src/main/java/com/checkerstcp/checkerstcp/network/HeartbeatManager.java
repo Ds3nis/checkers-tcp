@@ -32,12 +32,9 @@ public class HeartbeatManager {
         this.connection = connection;
     }
 
-    /**
-     * Запустити heartbeat моніторинг
-     */
     public synchronized void start() {
         if (isRunning.get()) {
-            System.out.println("⚠️ Heartbeat already running");
+            System.out.println("Heartbeat already running");
             return;
         }
 

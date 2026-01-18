@@ -187,14 +187,14 @@ public class LobbyController implements Initializable {
     private void setupReconnectCallbacks() {
         clientManager.setOnConnectionLost(() -> {
             Platform.runLater(() -> {
-                System.out.println("⚠️ Connection lost in lobby!");
+                System.out.println("Connection lost in lobby!");
                 reconnectDialog.show();
             });
         });
 
         clientManager.setOnReconnectSuccess(() -> {
             Platform.runLater(() -> {
-                System.out.println("✅ Connection restored in lobby!");
+                System.out.println("Connection restored in lobby!");
                 requestRoomsList();
             });
         });

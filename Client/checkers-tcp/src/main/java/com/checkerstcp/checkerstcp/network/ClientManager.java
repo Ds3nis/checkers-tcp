@@ -143,12 +143,6 @@ public class ClientManager {
             }
         });
 
-        reconnectDialog.setOnCancel(() -> {
-            reconnectManager.stopReconnect();
-            if (onReconnectFailed != null) {
-                onReconnectFailed.run();
-            }
-        });
     }
 
     /**
@@ -190,7 +184,6 @@ public class ClientManager {
             case LOGIN_OK:
                 Platform.runLater(() -> {
                     statusMessage.set("Logged in as " + currentClientId);
-                    // Автоматично запитуємо список кімнат (якщо сервер підтримує)
                     requestRoomsList();
                 });
                 connection.transitionToLobby();
