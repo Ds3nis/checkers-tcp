@@ -135,6 +135,8 @@ void log_client(const Client *client);
 void log_invalid_operation_attempt(Client *client, OpCode attempted_op);
 void disconnect_malicious_client(Server *server, Client *client,
                                 DisconnectReason reason, const char *raw_message);
+void handle_client_disconnect(Server *server, Client *client, int socket);
+void remove_client_after_timeout(Server *server, const char *client_id);
 
 
 #endif //SERVER_SERVER_H

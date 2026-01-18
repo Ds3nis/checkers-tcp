@@ -63,7 +63,7 @@ bool should_disconnect_client(ClientViolations *violations) {
     violations->invalid_message_count++;
 
     if (violations->invalid_message_count >= MAX_VIOLATIONS) {
-        fprintf(stderr, "🚨 SECURITY: Client exceeded violation limit (%d/%d)\n",
+        fprintf(stderr, "SECURITY: Client exceeded violation limit (%d/%d)\n",
                 violations->invalid_message_count, MAX_VIOLATIONS);
         return true;
     }
@@ -81,7 +81,7 @@ int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect
 
     if (strncmp(buffer, PREFIX, PREFIX_LEN) != 0) {
         fprintf(stderr, "Invalid message prefix\n");
-        fprintf(stderr, "   Expected: %s, Got: %.6s\n", PREFIX, buffer);
+        fprintf(stderr, "Expected: %s, Got: %.6s\n", PREFIX, buffer);
         *disconnect_reason = DISCONNECT_REASON_INVALID_PREFIX;
         return -1;
     }
@@ -186,7 +186,7 @@ int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect
 // Create message: DENTCP|OP|LEN|DATA
 int create_message(char *buffer, OpCode op, const char *data) {
     int data_len = data ? strlen(data) : 0;
-    int written = snprintf(buffer, MAX_MESSAGE_LEN, "%s|%02d|%04d|%s",
+    int written = snprintf(buffer, MAX_MESSAGE_LEN, "%s|%02d|%04d|%s\n",
                           PREFIX, op, data_len, data ? data : "");
 
     if (written >= MAX_MESSAGE_LEN) {

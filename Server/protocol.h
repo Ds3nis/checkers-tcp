@@ -69,9 +69,9 @@ typedef enum {
 } DisconnectReason;
 
 typedef struct {
-    int invalid_message_count;      // Кількість невалідних повідомлень
-    int unknown_opcode_count;       // Кількість невідомих OpCode
-    time_t last_violation_time;     // Час останнього порушення
+    int invalid_message_count;
+    int unknown_opcode_count;
+    time_t last_violation_time;
 } ClientViolations;
 
 #define MAX_VIOLATIONS 1
