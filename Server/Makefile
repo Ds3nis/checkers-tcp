@@ -11,7 +11,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
-	@echo "Build complete! Run with: ./$(TARGET) [port]"
+	@echo "Build complete! Run with: ./$(TARGET) [port] [address]"
 
 main.o: main.c server.h
 	$(CC) $(CFLAGS) -c main.c
