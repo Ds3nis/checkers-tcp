@@ -12,6 +12,12 @@
 #include <ctype.h>
 #include <unistd.h>
 
+/**
+ * Converts disconnect reason enum to human-readable string.
+ *
+ * @param reason Disconnect reason code
+ * @return String description of the reason
+ */
 const char* get_disconnect_reason_string(DisconnectReason reason) {
     switch (reason) {
         case DISCONNECT_REASON_INVALID_PREFIX:
@@ -35,10 +41,24 @@ const char* get_disconnect_reason_string(DisconnectReason reason) {
     }
 }
 
+/**
+ * Validates if operation code is within valid range.
+ *
+ * @param op Operation code to validate
+ * @return true if valid, false otherwise
+ */
 bool is_valid_opcode(int op) {
     return (op >= OP_LOGIN && op <= OP_GAME_RESUMED) || op == OP_ERROR;
 }
 
+/**
+ * Checks if string contains only numeric digits.
+ * Used for validating OpCode and Length fields in protocol parsing.
+ *
+ * @param str String to check
+ * @param len Length of string to check
+ * @return true if all characters are digits, false otherwise
+ */
 bool is_numeric_string(const char *str, int len) {
     if (len <= 0) return false;
 
@@ -50,9 +70,17 @@ bool is_numeric_string(const char *str, int len) {
     return true;
 }
 
+/**
+ * Checks if client should be disconnected based on violation history.
+ * Implements violation tracking with time-based reset mechanism.
+ *
+ * @param violations Pointer to client's violation tracking structure
+ * @return true if client should be disconnected
+ */
 bool should_disconnect_client(ClientViolations *violations) {
     time_t now = time(NULL);
 
+    // Reset violations after timeout period
     if (violations->last_violation_time > 0 &&
         (now - violations->last_violation_time) > VIOLATION_RESET_TIME) {
         violations->invalid_message_count = 0;
@@ -73,12 +101,32 @@ bool should_disconnect_client(ClientViolations *violations) {
 
 
 
-// Parse incoming message: DENTCP|OP|LEN|DATA
+/**
+ * Parses incoming protocol message.
+ *
+ * Protocol format: DENTCP|OP|LEN|DATA\n
+ * - DENTCP: Fixed prefix for protocol identification
+ * - OP: Two-digit operation code (01-99 || 500)
+ * - LEN: Four-digit data length (0000-9999)
+ * - DATA: Variable length payload
+ *
+ * Performs extensive validation to prevent malicious input:
+ * - Verifies protocol prefix
+ * - Validates field separators
+ * - Checks numeric fields contain only digits
+ * - Validates OpCode is in valid range
+ * - Prevents buffer overflow on data field
+ *
+ * @param buffer Input buffer containing raw message
+ * @param msg Output message structure to populate
+ * @param disconnect_reason Output reason code if parsing fails
+ * @return 0 on success, -1 on failure
+ */
 int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect_reason) {
     if (!buffer || !msg || !disconnect_reason) {
         return -1;
     }
-
+    // Validate protocol prefix
     if (strncmp(buffer, PREFIX, PREFIX_LEN) != 0) {
         fprintf(stderr, "Invalid message prefix\n");
         fprintf(stderr, "Expected: %s, Got: %.6s\n", PREFIX, buffer);
@@ -95,7 +143,7 @@ int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect
     char temp[16];
     const char *ptr = buffer + PREFIX_LEN + 1; // Skip "DENTCP|"
 
-    // Extract OP
+    // Extract and validate OP field
     const char *next_pipe = strchr(ptr, '|');
     if (!next_pipe) {
         fprintf(stderr, "SECURITY: Missing OP separator\n");
@@ -126,7 +174,7 @@ int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect
         return -1;
     }
 
-    // Extract LEN
+    // Extract and validate LEN field
     ptr = next_pipe + 1;
     next_pipe = strchr(ptr, '|');
     if (!next_pipe) {
@@ -159,7 +207,7 @@ int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect
         return -1;
     }
 
-    // Extract DATA
+    // Extract DATA field
     ptr = next_pipe + 1;
     int data_len = strlen(ptr);
     if (data_len > MAX_DATA_LEN - 1) {
@@ -183,7 +231,16 @@ int parse_message(const char *buffer, Message *msg, DisconnectReason *disconnect
     return 0;
 }
 
-// Create message: DENTCP|OP|LEN|DATA
+/**
+ * Creates a protocol message for sending.
+ *
+ * Format: DENTCP|OP|LEN|DATA\n
+ *
+ * @param buffer Output buffer to write message to
+ * @param op Operation code
+ * @param data Message payload (NULL for empty data)
+ * @return Number of bytes written, or -1 on error
+ */
 int create_message(char *buffer, OpCode op, const char *data) {
     int data_len = data ? strlen(data) : 0;
     int written = snprintf(buffer, MAX_MESSAGE_LEN, "%s|%02d|%04d|%s\n",
@@ -197,6 +254,12 @@ int create_message(char *buffer, OpCode op, const char *data) {
     return written;
 }
 
+/**
+ * Logs a parsed message for debugging.
+ *
+ * @param prefix Log prefix (e.g., "SEND", "RECV")
+ * @param msg Message to log
+ */
 void log_message(const char *prefix, const Message *msg) {
     printf("[%s] OP=%02d LEN=%d DATA=%s\n", prefix, msg->op, msg->len, msg->data);
 }

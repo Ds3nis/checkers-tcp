@@ -7,7 +7,12 @@
 #include <stdio.h>
 #include <string.h>
 
-
+/**
+ * Converts client game state enum to human-readable string.
+ *
+ * @param state Game state to convert
+ * @return String representation of the state
+ */
 const char* client_game_state_to_string(ClientGameState state) {
     switch (state) {
         case CLIENT_GAME_STATE_NOT_LOGGED_IN:
@@ -23,6 +28,13 @@ const char* client_game_state_to_string(ClientGameState state) {
     }
 }
 
+/**
+ * Gets list of operations allowed in a given game state.
+ * Implements the client state machine's operation whitelist.
+ *
+ * @param state Current game state
+ * @return Structure containing allowed operations
+ */
 AllowedOperations get_allowed_operations(ClientGameState state) {
     AllowedOperations ops;
     ops.count = 0;
@@ -71,6 +83,13 @@ AllowedOperations get_allowed_operations(ClientGameState state) {
     return ops;
 }
 
+/**
+ * Checks if an operation is allowed in the current game state.
+ *
+ * @param state Current game state
+ * @param op Operation to validate
+ * @return true if operation is allowed, false otherwise
+ */
 bool is_operation_allowed(ClientGameState state, OpCode op) {
     AllowedOperations ops = get_allowed_operations(state);
 
@@ -83,6 +102,13 @@ bool is_operation_allowed(ClientGameState state, OpCode op) {
     return false;
 }
 
+/**
+ * Transitions client to a new game state.
+ * Logs the state transition for debugging purposes.
+ *
+ * @param client Pointer to the client
+ * @param new_state New game state to transition to
+ */
 void transition_client_state(Client *client, ClientGameState new_state) {
     printf("Client %s: %s → %s\n",
            client->client_id[0] ? client->client_id : "anonymous",

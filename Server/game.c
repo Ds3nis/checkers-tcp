@@ -3,7 +3,16 @@
 #include <string.h>
 #include <stdlib.h>
 
-
+/**
+ * Initializes a new checkers game with starting board configuration.
+ * Sets up the standard 8x8 checkers board with pieces in starting positions:
+ * - White pieces (1) on rows 5-7
+ * - Black pieces (3) on rows 0-2
+ *
+ * @param game Pointer to game structure to initialize
+ * @param player1 Name of player 1 (white pieces)
+ * @param player2 Name of player 2 (black pieces)
+ */
 void init_game(Game *game, const char *player1, const char *player2) {
     int initial_board[BOARD_SIZE][BOARD_SIZE] = {
         {3, 0, 3, 0, 3, 0, 3, 0},
@@ -25,10 +34,24 @@ void init_game(Game *game, const char *player1, const char *player2) {
     game->game_active = true;
 }
 
+/**
+ * Resets game to initial state with same players.
+ *
+ * @param game Pointer to game to reset
+ */
 void reset_game(Game *game) {
     init_game(game, game->player1, game->player2);
 }
 
+/**
+ * Converts game board state to JSON format for client transmission.
+ * Returns a static buffer containing the JSON representation.
+ *
+ * Format: {"board":[[...]],"current_turn":"name","player1":"name","player2":"name"}
+ *
+ * @param game Pointer to game state
+ * @return Pointer to static JSON string buffer
+ */
 char* game_board_to_json(const Game *game) {
     static char json[4096];
     char *ptr = json;
@@ -51,6 +74,13 @@ char* game_board_to_json(const Game *game) {
     return json;
 }
 
+/**
+ * Rotates board 180 degrees and swaps piece colors.
+ * Used for perspective conversion in networked games.
+ *
+ * @param game Source game state
+ * @param rotated Output rotated board
+ */
 void rotate_board(const Game *game, int rotated[BOARD_SIZE][BOARD_SIZE]) {
     // Rotate 180 degrees and swap colors
     for (int i = 0; i < BOARD_SIZE; i++) {
@@ -66,12 +96,23 @@ void rotate_board(const Game *game, int rotated[BOARD_SIZE][BOARD_SIZE]) {
     }
 }
 
-
+/**
+ * Checks if a piece is a king.
+ *
+ * @param piece Piece type to check
+ * @return true if piece is a king
+ */
 bool is_king(int piece) {
     return piece == WHITE_KING || piece == BLACK_KING;
 }
 
-
+/**
+ * Checks if a piece belongs to the specified color.
+ *
+ * @param piece Piece type to check
+ * @param color Player color
+ * @return true if piece belongs to the color
+ */
 bool piece_belongs_to_color(int piece, PlayerColor color) {
     if (color == COLOR_WHITE) {
         return piece == WHITE_PIECE || piece == WHITE_KING;
@@ -80,35 +121,54 @@ bool piece_belongs_to_color(int piece, PlayerColor color) {
     }
 }
 
+
+/**
+ * Validates a single move step according to checkers rules.
+ *
+ * Rules enforced:
+ * - Regular pieces: Move 1 square diagonally forward, or jump 2 squares to capture
+ * - Kings: Move any distance diagonally, can capture with one enemy in path
+ * - Captures allowed in both directions (forward and backward)
+ * - Destination must be empty
+ * - Piece must belong to current player
+ *
+ * @param game Current game state
+ * @param from_row Source row
+ * @param from_col Source column
+ * @param to_row Destination row
+ * @param to_col Destination column
+ * @param player Player making the move
+ * @return true if move is valid
+ */
 bool validate_single_step(const Game *game, int from_row, int from_col,
                          int to_row, int to_col, const char *player) {
     printf(" Validating step: (%d,%d) -> (%d,%d)\n", from_row, from_col, to_row, to_col);
 
-    // Перевірка меж
+    // Bounds check
     if (from_row < 0 || from_row >= BOARD_SIZE || from_col < 0 || from_col >= BOARD_SIZE ||
         to_row < 0 || to_row >= BOARD_SIZE || to_col < 0 || to_col >= BOARD_SIZE) {
         printf("Out of bounds\n");
         return false;
     }
 
-    // Ціль порожня
+    // Destination must be empty
     if (game->board[to_row][to_col] != EMPTY) {
         printf("Destination not empty\n");
         return false;
     }
 
-    // Шашка існує
+    // Source must have a piece
     int piece = game->board[from_row][from_col];
     if (piece == EMPTY) {
         printf("Source empty\n");
         return false;
     }
 
-    // Колір гравця
+    // Determine player's color
     PlayerColor player_color = (strcmp(player, game->player1) == 0) ?
                                game->player1_color : game->player2_color;
 
-    // Належність шашки
+    // Piece must belong to player
     if (!piece_belongs_to_color(piece, player_color)) {
         printf("Wrong color (piece: %d, player: %s)\n", piece, player);
         return false;
@@ -118,13 +178,13 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
     int col_diff = abs(to_col - from_col);
     int abs_row_diff = abs(row_diff);
 
-    // Діагональ
+    // Must move diagonally
     if (abs_row_diff != col_diff) {
         printf("Not diagonal (row_diff: %d, col_diff: %d)\n", abs_row_diff, col_diff);
         return false;
     }
 
-    // ========== ДАМКА ==========
+    // ========== KING PIECE ==========
     if (is_king(piece)) {
         int dRow = (row_diff > 0) ? 1 : -1;
         int dCol = (to_col > from_col) ? 1 : -1;
@@ -132,7 +192,7 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
         int last_enemy_row = -1;
         int last_enemy_col = -1;
 
-        // Перевірити весь шлях
+        // Check entire path for obstacles
         for (int step = 1; step < abs_row_diff; step++) {
             int check_row = from_row + dRow * step;
             int check_col = from_col + dCol * step;
@@ -155,7 +215,7 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
             }
         }
 
-        // Дамка може: 0 ворогів (звичайний хід) або 1 ворог (біття)
+        // King can move freely (0 enemies) or capture (1 enemy)
         if (enemies == 0) {
             printf("Valid king move (distance: %d)\n", abs_row_diff);
             return true;
@@ -167,17 +227,15 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
         return false;
     }
 
-    // ========== ЗВИЧАЙНА ШАШКА ==========
+    // ========== REGULAR PIECE ==========
 
-    // ✅ ВИПРАВЛЕНО: Перевірка руху на 1 клітинку (звичайний хід)
+    // Single step move (non-capturing)
     if (abs_row_diff == 1 && col_diff == 1) {
-        // Звичайний хід - перевірити напрямок
+        // Check direction (regular pieces can only move forward)
         if (piece == WHITE_PIECE && row_diff == -1) {
-            // Біла шашка може ходити тільки вгору
             printf("Valid WHITE move forward\n");
             return true;
         } else if (piece == BLACK_PIECE && row_diff == 1) {
-            // Чорна шашка може ходити тільки вниз
             printf("Valid BLACK move forward\n");
             return true;
         } else {
@@ -186,9 +244,9 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
         }
     }
 
-    // ✅ ВИПРАВЛЕНО: Перевірка руху на 2 клітинки (біття)
+    // Capture move (jump over enemy)
     if (abs_row_diff == 2 && col_diff == 2) {
-        // Біття - ДОЗВОЛЕНО В ОБОХ НАПРЯМКАХ!
+        // Captures allowed in both directions (forward and backward)
         int mid_row = (from_row + to_row) / 2;
         int mid_col = (from_col + to_col) / 2;
         int mid_piece = game->board[mid_row][mid_col];
@@ -198,7 +256,7 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
             return false;
         }
 
-        // Перевірити що це ворожа шашка
+        // Verify it's an enemy piece
         bool is_enemy = false;
         if (piece == WHITE_PIECE || piece == WHITE_KING) {
             is_enemy = (mid_piece == BLACK_PIECE || mid_piece == BLACK_KING);
@@ -216,11 +274,22 @@ bool validate_single_step(const Game *game, int from_row, int from_col,
         }
     }
 
-    // Інші відстані недозволені для звичайних шашок
+    // Invalid move distance
     printf("Invalid move distance (%d) for regular piece\n", abs_row_diff);
     return false;
 }
 
+/**
+ * Validates a complete move including turn verification.
+ *
+ * @param game Current game state
+ * @param from_row Source row
+ * @param from_col Source column
+ * @param to_row Destination row
+ * @param to_col Destination column
+ * @param player Player making the move
+ * @return true if move is valid
+ */
 bool validate_move(const Game *game, int from_row, int from_col,
                   int to_row, int to_col, const char *player) {
     printf("\n=== VALIDATE MOVE ===\n");
@@ -233,15 +302,26 @@ bool validate_move(const Game *game, int from_row, int from_col,
     return validate_single_step(game, from_row, from_col, to_row, to_col, player);
 }
 
+/**
+ * Applies a single move step to the board.
+ * Handles piece movement, captures, and king promotion.
+ *
+ * @param game Game state to modify
+ * @param from_row Source row
+ * @param from_col Source column
+ * @param to_row Destination row
+ * @param to_col Destination column
+ */
 void apply_single_step(Game *game, int from_row, int from_col, int to_row, int to_col) {
     int piece = game->board[from_row][from_col];
     printf("Applying: (%d,%d)->(%d,%d)\n", from_row, from_col, to_row, to_col);
-
+    // Move piece
     game->board[to_row][to_col] = piece;
     game->board[from_row][from_col] = EMPTY;
 
     int row_diff = abs(to_row - from_row);
 
+    // Remove captured pieces (if jump move)
     if (row_diff >= 2) {
         int dRow = (to_row > from_row) ? 1 : -1;
         int dCol = (to_col > from_col) ? 1 : -1;
@@ -257,6 +337,7 @@ void apply_single_step(Game *game, int from_row, int from_col, int to_row, int t
         }
     }
 
+    // King promotion when reaching opposite end
     if (piece == WHITE_PIECE && to_row == 0) {
         game->board[to_row][to_col] = WHITE_KING;
         printf("  WHITE -> KING\n");
@@ -266,10 +347,25 @@ void apply_single_step(Game *game, int from_row, int from_col, int to_row, int t
     }
 }
 
+/**
+ * Applies a move to the game board.
+ *
+ * @param game Game state to modify
+ * @param from_row Source row
+ * @param from_col Source column
+ * @param to_row Destination row
+ * @param to_col Destination column
+ */
 void apply_move(Game *game, int from_row, int from_col, int to_row, int to_col) {
     apply_single_step(game, from_row, from_col, to_row, to_col);
 }
 
+/**
+ * Prints current board state to console for debugging.
+ * Legend: w=white, W=white king, b=black, B=black king, .=empty
+ *
+ * @param game Game state to print
+ */
 void print_board(const Game *game) {
     printf("\n=== CURRENT BOARD ===\n");
     printf("   ");
@@ -300,7 +396,11 @@ void print_board(const Game *game) {
     printf("====================\n\n");
 }
 
-
+/**
+ * Switches turn to the other player.
+ *
+ * @param game Game state to modify
+ */
 void change_turn(Game *game) {
     if (strcmp(game->current_turn, game->player1) == 0) {
         strncpy(game->current_turn, game->player2, MAX_PLAYER_NAME - 1);
@@ -311,6 +411,13 @@ void change_turn(Game *game) {
     }
 }
 
+/**
+ * Checks if game is over (one player has no pieces remaining).
+ *
+ * @param game Current game state
+ * @param winner Output buffer for winner's name
+ * @return true if game is over
+ */
 bool check_game_over(const Game *game, char *winner) {
     int white_pieces = 0, black_pieces = 0;
     

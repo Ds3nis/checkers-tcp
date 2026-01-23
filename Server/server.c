@@ -10,13 +10,19 @@
 #include "protocol.h"
 #include "client_state_machine.h"
 
-#define PING_INTERVAL_SEC 5              // Інтервал пінгів
-#define PONG_TIMEOUT_SEC 3               // Таймаут очікування понгу
-#define SHORT_DISCONNECT_THRESHOLD_SEC 40 // Поріг короткочасного відключення
-#define LONG_DISCONNECT_THRESHOLD_SEC 80  // Поріг довгого відключення
-#define MAX_MISSED_PONGS 3               // Максимум пропущених понгів
+#define PING_INTERVAL_SEC 5              // Ping interval
+#define PONG_TIMEOUT_SEC 3               // Pong wait timeout
+#define SHORT_DISCONNECT_THRESHOLD_SEC 40 // Short-term disconnection threshold
+#define LONG_DISCONNECT_THRESHOLD_SEC 80  // Long shutdown threshold
+#define MAX_MISSED_PONGS 3               // Maximum number of missed pongs
 
 
+/**
+ * Initializes the heartbeat monitoring system for a client.
+ * Sets up initial state, timestamps, and mutex for thread-safe operations.
+ *
+ * @param client Pointer to the client structure to initialize
+ */
 void client_init_heartbeat(Client *client) {
     client->state = CLIENT_STATE_CONNECTED;
     client->last_pong_time = time(NULL);
@@ -26,6 +32,13 @@ void client_init_heartbeat(Client *client) {
     pthread_mutex_init(&client->state_mutex, NULL);
 }
 
+/**
+ * Updates client state when a PONG response is received.
+ * Resets missed pong counter and marks client as reconnected if previously disconnected.
+ * Thread-safe operation using client state mutex.
+ *
+ * @param client Pointer to the client that sent the PONG
+ */
 void client_update_pong(Client *client) {
     pthread_mutex_lock(&client->state_mutex);
 
@@ -42,6 +55,13 @@ void client_update_pong(Client *client) {
     printf("PONG received from %s\n", client->client_id);
 }
 
+/**
+ * Checks if a client has exceeded timeout thresholds.
+ * Monitors PONG responses and disconnect duration to determine if client should be removed.
+ *
+ * @param client Pointer to the client to check
+ * @return true if client has timed out and should be removed, false otherwise
+ */
 bool client_check_timeout(Client *client) {
     pthread_mutex_lock(&client->state_mutex);
 
@@ -84,6 +104,14 @@ bool client_check_timeout(Client *client) {
     return false;
 }
 
+
+/**
+ * Marks a client as disconnected and closes their socket.
+ * Only transitions from CONNECTED state to prevent state conflicts.
+ * Closing the socket will wake up blocking recv() calls in the client handler thread.
+ *
+ * @param client Pointer to the client to mark as disconnected
+ */
 void client_mark_disconnected(Client *client) {
     if (client->state == CLIENT_STATE_CONNECTED) {
         client->state = CLIENT_STATE_DISCONNECTED;
@@ -99,6 +127,12 @@ void client_mark_disconnected(Client *client) {
     }
 }
 
+/**
+ * Transitions client from DISCONNECTED to RECONNECTING state.
+ * This intermediate state helps track ongoing reconnection attempts.
+ *
+ * @param client Pointer to the client attempting to reconnect
+ */
 void client_mark_reconnecting(Client *client) {
     if (client->state == CLIENT_STATE_DISCONNECTED) {
         client->state = CLIENT_STATE_RECONNECTING;
@@ -106,6 +140,12 @@ void client_mark_reconnecting(Client *client) {
     }
 }
 
+/**
+ * Marks client as successfully reconnected.
+ * Resets disconnect tracking and restores client to CONNECTED state.
+ *
+ * @param client Pointer to the client that reconnected
+ */
 void client_mark_reconnected(Client *client) {
     long disconnect_duration = 0;
 
@@ -122,11 +162,23 @@ void client_mark_reconnected(Client *client) {
            client->client_id, disconnect_duration);
 }
 
+/**
+ * Marks client as timed out (exceeded long disconnect threshold).
+ * This is the final state before removal.
+ *
+ * @param client Pointer to the client to mark as timed out
+ */
 void client_mark_timeout(Client *client) {
     client->state = CLIENT_STATE_TIMEOUT;
     printf("Client %s marked as TIMEOUT\n", client->client_id);
 }
 
+/**
+ * Calculates how long a client has been disconnected.
+ *
+ * @param client Pointer to the client
+ * @return Duration in seconds, or 0 if client is not disconnected
+ */
 long client_get_disconnect_duration(const Client *client) {
     if (client->disconnect_time == 0) {
         return 0;
@@ -134,11 +186,23 @@ long client_get_disconnect_duration(const Client *client) {
     return time(NULL) - client->disconnect_time;
 }
 
+/**
+ * Checks if client disconnect qualifies as "short" (eligible for quick reconnect).
+ *
+ * @param client Pointer to the client
+ * @return true if disconnect duration is within short threshold
+ */
 bool client_is_short_disconnect(const Client *client) {
     long duration = client_get_disconnect_duration(client);
     return duration > 0 && duration <= SHORT_DISCONNECT_THRESHOLD_SEC;
 }
 
+/**
+ * Converts client state enum to human-readable string.
+ *
+ * @param state Client state to convert
+ * @return String representation of the state
+ */
 const char* client_get_state_string(ClientState state) {
     switch(state) {
         case CLIENT_STATE_CONNECTED: return "CONNECTED";
@@ -150,6 +214,12 @@ const char* client_get_state_string(ClientState state) {
     }
 }
 
+/**
+ * Initializes room state management system.
+ * Sets up initial state, pause tracking, and mutex for thread-safe operations.
+ *
+ * @param room Pointer to the room structure to initialize
+ */
 void room_init_state(Room *room) {
     room->state = ROOM_STATE_WAITING;
     room->pause_start_time = 0;
@@ -158,6 +228,14 @@ void room_init_state(Room *room) {
     pthread_mutex_init(&room->room_mutex, NULL);
 }
 
+/**
+ * Pauses an active game when a player disconnects.
+ * Records which player disconnected and when the pause started.
+ * Only pauses games that are currently active.
+ *
+ * @param room Pointer to the room containing the game
+ * @param player_name Name of the player who disconnected
+ */
 void room_pause_game(Room *room, const char *player_name) {
     pthread_mutex_lock(&room->room_mutex);
 
@@ -178,6 +256,13 @@ void room_pause_game(Room *room, const char *player_name) {
            room->name, player_name);
 }
 
+/**
+ * Resumes a paused game after player reconnection.
+ * Calculates and logs how long the game was paused.
+ * Only resumes games that are currently paused.
+ *
+ * @param room Pointer to the room containing the paused game
+ */
 void room_resume_game(Room *room) {
     pthread_mutex_lock(&room->room_mutex);
 
@@ -199,6 +284,12 @@ void room_resume_game(Room *room) {
            room->name, pause_duration);
 }
 
+/**
+ * Marks a game as finished and stops waiting for reconnection.
+ *
+ * @param room Pointer to the room containing the game
+ * @param reason String describing why the game ended
+ */
 void room_finish_game(Room *room, const char *reason) {
     pthread_mutex_lock(&room->room_mutex);
 
@@ -210,6 +301,13 @@ void room_finish_game(Room *room, const char *reason) {
     printf("Game FINISHED in room %s (reason: %s)\n", room->name, reason);
 }
 
+/**
+ * Checks if a paused room has exceeded the timeout threshold.
+ *
+ * @param room Pointer to the room to check
+ * @param timeout_seconds Maximum allowed pause duration in seconds
+ * @return true if pause duration exceeds timeout, false otherwise
+ */
 bool room_should_timeout(const Room *room, int timeout_seconds) {
     if (room->state != ROOM_STATE_PAUSED) {
         return false;
@@ -219,6 +317,12 @@ bool room_should_timeout(const Room *room, int timeout_seconds) {
     return pause_duration >= timeout_seconds;
 }
 
+/**
+ * Calculates how long a room has been paused.
+ *
+ * @param room Pointer to the room
+ * @return Pause duration in seconds, or 0 if room is not paused
+ */
 long room_get_pause_duration(const Room *room) {
     if (room->pause_start_time == 0) {
         return 0;
@@ -226,6 +330,12 @@ long room_get_pause_duration(const Room *room) {
     return time(NULL) - room->pause_start_time;
 }
 
+/**
+ * Converts room state enum to human-readable string.
+ *
+ * @param state Room state to convert
+ * @return String representation of the state
+ */
 const char* room_get_state_string(RoomState state) {
     switch(state) {
         case ROOM_STATE_WAITING: return "WAITING";
@@ -236,6 +346,20 @@ const char* room_get_state_string(RoomState state) {
     }
 }
 
+/**
+ * Main heartbeat monitoring thread.
+ * Periodically sends PING messages to all connected clients and monitors their responses.
+ * Handles timeouts, disconnections, and room pause timeouts.
+ *
+ * This thread runs continuously while the server is active and performs:
+ * 1. Sends PING to all active clients at regular intervals
+ * 2. Checks for clients that haven't responded with PONG
+ * 3. Removes clients that exceed timeout thresholds
+ * 4. Checks for games paused too long due to disconnection
+ *
+ * @param arg Pointer to the Server structure
+ * @return NULL when thread exits
+ */
 void* heartbeat_thread(void *arg) {
     Server *server = (Server*)arg;
 
@@ -255,7 +379,6 @@ void* heartbeat_thread(void *arg) {
         ClientAction actions[MAX_CLIENTS];
         int action_count = 0;
 
-        // ========== ЗБИРАЄМО ДАНІ ПІД МУТЕКСОМ ==========
         pthread_mutex_lock(&server->clients_mutex);
 
         for (int i = 0; i < MAX_CLIENTS; i++) {
@@ -371,6 +494,14 @@ void* heartbeat_thread(void *arg) {
     return NULL;
 }
 
+/**
+ * Removes a client after they have exceeded the timeout threshold.
+ * Closes socket, marks client as removed, and decrements client count.
+ * Thread-safe operation.
+ *
+ * @param server Pointer to the server
+ * @param client_id ID of the client to remove
+ */
 void remove_client_after_timeout(Server *server, const char *client_id) {
     pthread_mutex_lock(&server->clients_mutex);
 
@@ -402,7 +533,15 @@ void remove_client_after_timeout(Server *server, const char *client_id) {
     pthread_mutex_unlock(&server->clients_mutex);
 }
 
-
+/**
+ * Handles player disconnection from a game.
+ * Behavior depends on room state:
+ * - WAITING: Notifies other player
+ * - ACTIVE: Pauses game and notifies opponent
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the disconnected client
+ */
 void handle_player_disconnect(Server *server, Client *client) {
     pthread_mutex_lock(&server->rooms_mutex);
 
@@ -456,6 +595,13 @@ void handle_player_disconnect(Server *server, Client *client) {
     pthread_mutex_unlock(&server->rooms_mutex);
 }
 
+/**
+ * Handles long-term player disconnection (exceeded 80 second threshold).
+ * Awards victory to opponent by timeout and cleans up the room.
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the client who timed out
+ */
 void handle_player_long_disconnect(Server *server, Client *client) {
     pthread_mutex_lock(&server->rooms_mutex);
 
@@ -499,6 +645,13 @@ void handle_player_long_disconnect(Server *server, Client *client) {
     client->state = CLIENT_STATE_REMOVED;
 }
 
+
+/**
+ * Checks all paused rooms for timeout and handles expired pauses.
+ * Called periodically by the heartbeat thread.
+ *
+ * @param server Pointer to the server
+ */
 void check_room_pause_timeouts(Server *server) {
     pthread_mutex_lock(&server->rooms_mutex);
 
@@ -509,6 +662,7 @@ void check_room_pause_timeouts(Server *server) {
             continue;
         }
 
+        // Check if pause exceeded long disconnect threshold
         if (room_should_timeout(room, LONG_DISCONNECT_THRESHOLD_SEC)) {
             printf("Room %s pause timeout exceeded\n", room->name);
 
@@ -524,13 +678,26 @@ void check_room_pause_timeouts(Server *server) {
 }
 
 
+/**
+ * Handles client reconnection requests.
+ * Validates reconnection eligibility, transfers socket to existing client structure,
+ * and restores client to their previous game state (lobby, waiting room, or active game).
+ *
+ * Protocol format: "room_name,player_name" or just "player_name" for lobby reconnect
+ *
+ * @param server Pointer to the server
+ * @param temp_client Temporary client structure for the new connection
+ * @param data Reconnection request data containing room and player name
+ */
 void handle_reconnect_request(Server *server, Client *temp_client, const char *data) {
     char room_name[MAX_ROOM_NAME];
     char player_name[MAX_PLAYER_NAME];
 
+    // Parse reconnection data (room_name,player_name or just player_name)
     int parsed = sscanf(data, "%[^,],%s", room_name, player_name);
 
     if (parsed == 1) {
+        // Only player name provided (lobby reconnect)
         strncpy(player_name, room_name, MAX_PLAYER_NAME - 1);
         player_name[MAX_PLAYER_NAME - 1] = '\0';
         room_name[0] = '\0';
@@ -539,6 +706,7 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
         return;
     }
 
+    // Clean up input strings
     player_name[strcspn(player_name, "\r\n")] = '\0';
     room_name[strcspn(room_name, "\r\n")] = '\0';
 
@@ -559,6 +727,7 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
 
     ClientState old_state = old_client->state;
 
+    // Validate client is in a reconnectable state
     if (old_state == CLIENT_STATE_REMOVED) {
         pthread_mutex_unlock(&old_client->state_mutex);
         pthread_mutex_unlock(&server->clients_mutex);
@@ -584,14 +753,17 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
     printf("   Old socket: %d (closed), New socket: %d\n",
            old_client->socket, temp_client->socket);
 
+    // Mark as reconnecting to prevent removal by heartbeat thread
     old_client->state = CLIENT_STATE_RECONNECTING;
     old_client->disconnect_time = 0;
 
-    int old_socket = old_client->socket;  // Може бути -1
+    // Close old socket if still open (safety measure)
+    int old_socket = old_client->socket;
     if (old_socket > 0) {
-        close(old_socket);  // На всяк випадок
+        close(old_socket);
     }
 
+    // Transfer new socket and thread to existing client structure
     old_client->socket = temp_client->socket;
     old_client->thread = temp_client->thread;
     old_client->active = true;
@@ -601,6 +773,7 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
 
     pthread_mutex_unlock(&old_client->state_mutex);
 
+    // Invalidate temporary client structure
     temp_client->active = false;
     temp_client->logged_in = false;
     temp_client->client_id[0] = '\0';
@@ -611,18 +784,21 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
 
     pthread_mutex_unlock(&server->clients_mutex);
 
+    // Restore client to their previous game state
     ClientGameState game_state = old_client->game_state;
     printf("Restoring state: %s\n",
            client_game_state_to_string(game_state));
 
     switch (game_state) {
         case CLIENT_GAME_STATE_IN_LOBBY:
+            // Reconnect to lobby
             send_message(old_client->socket, OP_RECONNECT_OK, "lobby");
             send_message(old_client->socket, OP_LOGIN_OK, player_name);
-            printf("✅ %s reconnected to lobby\n", player_name);
+            printf("%s reconnected to lobby\n", player_name);
             break;
 
         case CLIENT_GAME_STATE_IN_ROOM_WAITING:
+            // Reconnect to waiting room
             if (room_name[0] == '\0') {
                 send_message(old_client->socket, OP_RECONNECT_FAIL,
                             "Room name required");
@@ -633,13 +809,14 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
             Room *waiting_room = find_room(server, room_name);
 
             if (!waiting_room) {
+                // Room was closed, return to lobby
                 pthread_mutex_unlock(&server->rooms_mutex);
                 old_client->current_room[0] = '\0';
                 transition_client_state(old_client, CLIENT_GAME_STATE_IN_LOBBY);
                 send_message(old_client->socket, OP_RECONNECT_FAIL,
                             "Room was closed");
                 send_message(old_client->socket, OP_LOGIN_OK, player_name);
-                printf("⚠️ Room closed, returning to lobby\n");
+                printf("Room closed, returning to lobby\n");
                 break;
             }
 
@@ -650,11 +827,12 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
             send_message(old_client->socket, OP_ROOM_JOINED, room_info);
             pthread_mutex_unlock(&server->rooms_mutex);
 
-            printf("✅ %s reconnected to waiting room %s\n",
+            printf("%s reconnected to waiting room %s\n",
                    player_name, room_name);
             break;
 
         case CLIENT_GAME_STATE_IN_GAME:
+            // Reconnect to active game
             if (room_name[0] == '\0') {
                 send_message(old_client->socket, OP_RECONNECT_FAIL,
                             "Room name required");
@@ -665,15 +843,17 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
             Room *game_room = find_room(server, room_name);
 
             if (!game_room) {
+                // Game ended, return to lobby
                 pthread_mutex_unlock(&server->rooms_mutex);
                 old_client->current_room[0] = '\0';
                 transition_client_state(old_client, CLIENT_GAME_STATE_IN_LOBBY);
                 send_message(old_client->socket, OP_RECONNECT_FAIL, "Game ended");
                 send_message(old_client->socket, OP_LOGIN_OK, player_name);
-                printf("⚠️ Game ended, returning to lobby\n");
+                printf("Game ended, returning to lobby\n");
                 break;
             }
 
+            // Verify player is a member of this game
             bool is_player1 = (strcmp(game_room->player1, player_name) == 0);
             bool is_player2 = (strcmp(game_room->player2, player_name) == 0);
 
@@ -685,13 +865,14 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
             }
 
             if (game_room->state == ROOM_STATE_PAUSED) {
+                // Resume paused game
                 room_resume_game(game_room);
                 send_message(old_client->socket, OP_RECONNECT_OK, room_name);
                 send_message(old_client->socket, OP_GAME_RESUMED, room_name);
                 char *board_json = game_board_to_json(&game_room->game);
                 send_message(old_client->socket, OP_GAME_STATE, board_json);
 
-                // Повідомити іншого гравця
+                // Notify opponent about reconnection and resume
                 char *other_player = is_player1 ? game_room->player2 :
                                                    game_room->player1;
                 if (other_player[0] != '\0') {
@@ -704,21 +885,23 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
                         send_message(other->socket, OP_GAME_RESUMED, room_name);
                     }
                 }
-                printf("✅ %s reconnected, game resumed\n", player_name);
+                printf("%s reconnected, game resumed\n", player_name);
 
             } else if (game_room->state == ROOM_STATE_ACTIVE) {
+                // Reconnect to already active game
                 send_message(old_client->socket, OP_RECONNECT_OK, room_name);
                 char *board_json = game_board_to_json(&game_room->game);
                 send_message(old_client->socket, OP_GAME_STATE, board_json);
-                printf("✅ %s reconnected to active game\n", player_name);
+                printf("%s reconnected to active game\n", player_name);
 
             } else {
+                // Game not in valid state, return to lobby
                 send_message(old_client->socket, OP_RECONNECT_FAIL,
                             "Game not active");
                 old_client->current_room[0] = '\0';
                 transition_client_state(old_client, CLIENT_GAME_STATE_IN_LOBBY);
                 send_message(old_client->socket, OP_LOGIN_OK, player_name);
-                printf("⚠️ Game not active, returning to lobby\n");
+                printf("Game not active, returning to lobby\n");
             }
 
             pthread_mutex_unlock(&server->rooms_mutex);
@@ -732,6 +915,13 @@ void handle_reconnect_request(Server *server, Client *temp_client, const char *d
 
 
 
+/**
+ * Checks if a client is eligible for reconnection.
+ *
+ * @param server Pointer to the server
+ * @param player_name Name of the player attempting to reconnect
+ * @return true if client can reconnect, false otherwise
+ */
 bool can_client_reconnect(Server *server, const char *player_name) {
     pthread_mutex_lock(&server->clients_mutex);
 
@@ -752,8 +942,17 @@ bool can_client_reconnect(Server *server, const char *player_name) {
 }
 
 
-
-int server_init(Server *server, int port) {
+/**
+ * Initializes the server with the specified port.
+ * Creates and configures the server socket, sets socket options,
+ * binds to the port, and begins listening for connections.
+ *
+ * @param server Pointer to the server structure to initialize
+ * @param port Port number to bind to
+ * @param bind_address Adress to bind to
+ * @return 0 on success, -1 on failure
+ */
+int server_init(Server *server, int port, const char *bind_address) {
     server->port = port;
     server->running = false;
     server->client_count = 0;
@@ -784,8 +983,21 @@ int server_init(Server *server, int port) {
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(port);
+
+    if (bind_address == NULL) {
+        // Default: listen on all interfaces
+        server_addr.sin_addr.s_addr = INADDR_ANY;
+        printf("Initializing server on 0.0.0.0:%d (all interfaces)...\n", port);
+    } else {
+        // Try to parse the provided IP address
+        if (inet_pton(AF_INET, bind_address, &server_addr.sin_addr) <= 0) {
+            fprintf(stderr, "Invalid bind address: %s\n", bind_address);
+            close(server->server_socket);
+            return -1;
+        }
+        printf("Initializing server on %s:%d...\n", bind_address, port);
+    }
 
     if (bind(server->server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
@@ -804,6 +1016,15 @@ int server_init(Server *server, int port) {
     return 0;
 }
 
+
+/**
+ * Sends a protocol message to a client.
+ * Creates a formatted message using the protocol and sends it over the socket.
+ *
+ * @param socket Client socket to send to
+ * @param op Operation code for the message
+ * @param data Message payload data
+ */
 void send_message(int socket, OpCode op, const char *data) {
     char buffer[MAX_MESSAGE_LEN];
     int len = create_message(buffer, op, data);
@@ -813,6 +1034,15 @@ void send_message(int socket, OpCode op, const char *data) {
     }
 }
 
+/**
+ * Adds a new client connection to the server.
+ * Finds an available client slot, initializes the client structure,
+ * and sets up heartbeat monitoring.
+ *
+ * @param server Pointer to the server
+ * @param socket Socket for the new client connection
+ * @return Index of the added client, or -1 if server is full
+ */
 int add_client(Server *server, int socket) {
     pthread_mutex_lock(&server->clients_mutex);
 
@@ -821,6 +1051,7 @@ int add_client(Server *server, int socket) {
         return -1;
     }
 
+    // Find first available client slot
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (!server->clients[i].active) {
             server->clients[i].socket = socket;
@@ -848,75 +1079,39 @@ int add_client(Server *server, int socket) {
     return -1;
 }
 
-void remove_client(Server *server, const char *client_id) {
-    pthread_mutex_lock(&server->clients_mutex);
-
-    Client *client = NULL;
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-        if (server->clients[i].active &&
-            strcmp(server->clients[i].client_id, client_id) == 0) {
-            client = &server->clients[i];
-            break;
-            }
-    }
-
-    if (!client) {
-        pthread_mutex_unlock(&server->clients_mutex);
-        return;
-    }
-
-    // ========== ВИПРАВЛЕНО: Розрізняти відключення та явний вихід ==========
-
-    bool is_disconnect = (client->state == CLIENT_STATE_DISCONNECTED ||
-                         client->state == CLIENT_STATE_TIMEOUT);
-    bool is_in_game = (client->current_room[0] != '\0');
-
-    if (is_in_game) {
-        if (is_disconnect) {
-            // При відключенні - НЕ видаляємо кімнату (чекаємо реконект)
-            printf("Client %s disconnected (room preserved)\n", client_id);
-            leave_room_on_disconnect(server, client->current_room, client_id);
-        } else {
-            // При явному виході - видаляємо кімнату
-            printf("Client %s explicitly leaving\n", client_id);
-            leave_room(server, client->current_room, client_id);
-        }
-    }
-
-
-
-    close(client->socket);
-    client->active = false;
-    pthread_mutex_destroy(&client->state_mutex);
-
-    server->client_count--;
-    printf("Client %s removed (total clients: %d)\n", client_id, server->client_count);
-
-    pthread_mutex_unlock(&server->clients_mutex);
-}
-
+/**
+ * Disconnects a client that has been flagged as malicious.
+ * Removes client from their room, closes connection, and cleans up resources.
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the malicious client
+ * @param reason Reason code for the disconnection
+ * @param raw_message The message that triggered the disconnection (unused)
+ */
 void disconnect_malicious_client(Server *server, Client *client,
                                 DisconnectReason reason, const char *raw_message) {
-    (void)raw_message; // Unused parameter
+    (void)raw_message;
+    (void)reason;// Unused parameter
 
     printf("[DISCONNECT] Disconnecting malicious client: %s (socket %d)\n",
            client->client_id, client->socket);
 
-    // Якщо клієнт в кімнаті, виходимо з неї
+
+    // Remove from room if present
     if (client->current_room[0] != '\0') {
         leave_room(server, client->current_room, client->client_id);
     }
 
-    // Закриваємо з'єднання
+    // Close connection
     close(client->socket);
 
-    // Позначаємо клієнта як неактивного
+    // Mark as inactive and removed
     pthread_mutex_lock(&client->state_mutex);
     client->active = false;
     client->state = CLIENT_STATE_REMOVED;
     pthread_mutex_unlock(&client->state_mutex);
 
-    // Видаляємо клієнта з списку
+    //  Remove client from client list
     pthread_mutex_lock(&server->clients_mutex);
     for (int i = 0; i < server->client_count; i++) {
         if (strcmp(server->clients[i].client_id, client->client_id) == 0) {
@@ -931,11 +1126,14 @@ void disconnect_malicious_client(Server *server, Client *client,
     pthread_mutex_unlock(&server->clients_mutex);
 }
 
-
-
-
-
-
+/**
+ * Finds a client by their ID.
+ * Thread-safe operation - caller should hold clients_mutex if needed.
+ *
+ * @param server Pointer to the server
+ * @param client_id ID of the client to find
+ * @return Pointer to the client, or NULL if not found
+ */
 Client* find_client(Server *server, const char *client_id) {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (server->clients[i].active &&
@@ -946,6 +1144,14 @@ Client* find_client(Server *server, const char *client_id) {
     return NULL;
 }
 
+/**
+ * Creates a new game room.
+ *
+ * @param server Pointer to the server
+ * @param room_name Name for the new room
+ * @param creator Name of the player creating the room
+ * @return Pointer to the created room, or NULL if room exists or server is full
+ */
 Room* create_room(Server *server, const char *room_name, const char *creator) {
     pthread_mutex_lock(&server->rooms_mutex);
 
@@ -981,6 +1187,14 @@ Room* create_room(Server *server, const char *room_name, const char *creator) {
     return NULL;
 }
 
+/**
+ * Finds a room by name.
+ * Thread-safe operation - caller should hold rooms_mutex if needed.
+ *
+ * @param server Pointer to the server
+ * @param room_name Name of the room to find
+ * @return Pointer to the room, or NULL if not found
+ */
 Room* find_room(Server *server, const char *room_name) {
     for (int i = 0; i < MAX_ROOMS; i++) {
         if ((server->rooms[i].players_count > 0 || strlen(server->rooms[i].owner) > 0)&&
@@ -991,6 +1205,21 @@ Room* find_room(Server *server, const char *room_name) {
     return NULL;
 }
 
+/**
+ * Adds a player to a game room.
+ * Validates room availability, player eligibility, and starts the game when both players join.
+ * Uses two-phase locking to prevent race conditions.
+ *
+ * @param server Pointer to the server
+ * @param room_name Name of the room to join
+ * @param player_name Name of the player joining
+ * @return 0 on success, negative error codes on failure:
+ *         -1: Room not found
+ *         -2: Room is full
+ *         -3: Player already in this room
+ *         -4: Player already in another room
+ *         -5: Client not found
+ */
 int join_room(Server *server, const char *room_name, const char *player_name) {
     pthread_mutex_lock(&server->rooms_mutex);
 
@@ -1005,6 +1234,7 @@ int join_room(Server *server, const char *room_name, const char *player_name) {
         return -2;
     }
 
+    // Check if player already in this room
     if (strcmp(room->player1, player_name) == 0 ||
         strcmp(room->player2, player_name) == 0) {
         pthread_mutex_unlock(&server->rooms_mutex);
@@ -1012,7 +1242,7 @@ int join_room(Server *server, const char *room_name, const char *player_name) {
     }
 
     pthread_mutex_unlock(&server->rooms_mutex);
-
+    // Verify client exists and is not in another room
     pthread_mutex_lock(&server->clients_mutex);
     Client *client = find_client(server, player_name);
     if (!client) {
@@ -1025,7 +1255,7 @@ int join_room(Server *server, const char *room_name, const char *player_name) {
         return -4;
     }
     pthread_mutex_unlock(&server->clients_mutex);
-
+    // Re-acquire room lock and add player
     pthread_mutex_lock(&server->rooms_mutex);
 
 
@@ -1034,7 +1264,7 @@ int join_room(Server *server, const char *room_name, const char *player_name) {
         pthread_mutex_unlock(&server->rooms_mutex);
         return -1;
     }
-
+    // Add player to first available slot
     if (room->player1[0] == '\0') {
         strncpy(room->player1, player_name, MAX_PLAYER_NAME - 1);
         room->player1[MAX_PLAYER_NAME - 1] = '\0';
@@ -1045,6 +1275,7 @@ int join_room(Server *server, const char *room_name, const char *player_name) {
         room->players_count = 2;
     }
 
+    // Initialize game when both players have joined
     if (room->players_count == 2 && !room->game_started) {
         init_game(&room->game, room->player1, room->player2);
         room->game_started = true;
@@ -1058,6 +1289,15 @@ int join_room(Server *server, const char *room_name, const char *player_name) {
     return 0;
 }
 
+/**
+ * Handles player disconnection from a room (preserves room for reconnection).
+ * Called when a player disconnects unexpectedly rather than explicitly leaving.
+ * Room and game state are preserved to allow reconnection.
+ *
+ * @param server Pointer to the server
+ * @param room_name Name of the room
+ * @param player_name Name of the disconnected player
+ */
 void leave_room_on_disconnect(Server *server, const char *room_name, const char *player_name) {
     pthread_mutex_lock(&server->rooms_mutex);
 
@@ -1073,7 +1313,15 @@ void leave_room_on_disconnect(Server *server, const char *room_name, const char 
     pthread_mutex_unlock(&server->rooms_mutex);
 }
 
-
+/**
+ * Removes a player from a room (explicit leave).
+ * Cleans up the room completely and notifies remaining players.
+ * If the last player leaves or if one player explicitly leaves, the room is destroyed.
+ *
+ * @param server Pointer to the server
+ * @param room_name Name of the room to leave
+ * @param player_name Name of the player leaving
+ */
 void leave_room(Server *server, const char *room_name, const char *player_name) {
     pthread_mutex_lock(&server->rooms_mutex);
 
@@ -1088,11 +1336,13 @@ void leave_room(Server *server, const char *room_name, const char *player_name) 
     room->players_count--;
 
     if (room->players_count == 0) {
+        // Last player left - destroy room
         pthread_mutex_destroy(&room->room_mutex);
         memset(room, 0, sizeof(Room));
         server->room_count--;
         printf("Room %s removed (no players left)\n", room_name);
     } else {
+        // Find and notify the remaining player
         Client *other = NULL;
         if (strcmp(room->player1, player_name) != 0) {
             other = find_client(server, room->player1);
@@ -1107,7 +1357,7 @@ void leave_room(Server *server, const char *room_name, const char *player_name) 
             send_message(other->socket, OP_ROOM_LEFT, msg);
             transition_client_state(other, CLIENT_GAME_STATE_IN_LOBBY);
         }
-
+        // Destroy room after notifying
         pthread_mutex_destroy(&room->room_mutex);
         memset(room, 0, sizeof(Room));
         server->room_count--;
@@ -1117,6 +1367,14 @@ void leave_room(Server *server, const char *room_name, const char *player_name) 
     pthread_mutex_unlock(&server->rooms_mutex);
 }
 
+/**
+ * Broadcasts a message to all players in a room.
+ *
+ * @param server Pointer to the server
+ * @param room_name Name of the room to broadcast to
+ * @param op Operation code for the message
+ * @param data Message payload data
+ */
 void broadcast_to_room(Server *server, const char *room_name, OpCode op, const char *data) {
     Room *room = find_room(server, room_name);
     if (!room) return;
@@ -1128,6 +1386,16 @@ void broadcast_to_room(Server *server, const char *room_name, OpCode op, const c
     if (p2) send_message(p2->socket, op, data);
 }
 
+/**
+ * Handles client login request.
+ * Validates username, checks for duplicates, and initializes client state.
+ *
+ * Protocol format: "player_name"
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the client attempting to login
+ * @param data Login data containing player name
+ */
 void handle_login(Server *server, Client *client, const char *data) {
     pthread_mutex_lock(&server->clients_mutex);
 
@@ -1172,6 +1440,18 @@ void handle_login(Server *server, Client *client, const char *data) {
     printf("Client logged in: '%s' (socket %d)\n", client->client_id, client->socket);
 }
 
+
+
+/**
+ * Handles room creation request.
+ * Creates a new game room if name is available.
+ *
+ * Protocol format: "player_name,room_name"
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the client creating the room
+ * @param data Room creation data
+ */
 void handle_create_room(Server *server, Client *client, const char *data) {
     if (!client->logged_in) {
         send_message(client->socket, OP_ROOM_FAIL, "Not logged in");
@@ -1198,6 +1478,17 @@ void handle_create_room(Server *server, Client *client, const char *data) {
     log_client(client);
 }
 
+/**
+ * Handles player request to join a room.
+ * Validates room availability and player eligibility, then adds player to room.
+ * Starts game automatically when second player joins.
+ *
+ * Protocol format: "player_name,room_name"
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the client joining
+ * @param data Join request data
+ */
 void handle_join_room(Server *server, Client *client, const char *data) {
 
     if (!client->logged_in) {
@@ -1215,6 +1506,7 @@ void handle_join_room(Server *server, Client *client, const char *data) {
 
     int result = join_room(server, room_name, player_name);
 
+    // Handle various error conditions
     if (result == -1) {
         send_message(client->socket, OP_ROOM_FAIL, "Room not found");
         return;
@@ -1232,6 +1524,7 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         return;
     }
 
+    // Update client's current room
     strncpy(client->current_room, room_name, MAX_ROOM_NAME - 1);
     client->current_room[MAX_ROOM_NAME - 1] = '\0';
 
@@ -1241,6 +1534,7 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         return;
     }
 
+    // Notify client of successful join
     char response[256];
     snprintf(response, sizeof(response), "%s,%d", room_name, room->players_count);
     send_message(client->socket, OP_ROOM_JOINED, response);
@@ -1269,6 +1563,16 @@ void handle_join_room(Server *server, Client *client, const char *data) {
 }
 
 
+/**
+ * Handles a single move in the checkers game.
+ * Validates the move, applies it to the game state, and checks for game over.
+ *
+ * Protocol format: "room_name,player_name,from_row,from_col,to_row,to_col"
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the client making the move
+ * @param data Move data
+ */
 void handle_move(Server *server, Client *client, const char *data) {
     if (!client->logged_in || client->current_room[0] == '\0') {
         send_message(client->socket, OP_ERROR, "Not in a game");
@@ -1293,7 +1597,7 @@ void handle_move(Server *server, Client *client, const char *data) {
     }
 
     print_board(&room->game);
-    // Validate move
+    // Validate move according to game rules
     if (!validate_move(&room->game, from_row, from_col, to_row, to_col, player_name)) {
         send_message(client->socket, OP_INVALID_MOVE, "Invalid move");
         return;
@@ -1314,10 +1618,21 @@ void handle_move(Server *server, Client *client, const char *data) {
         snprintf(end_msg, sizeof(end_msg), "%s,no_pieces", winner);
         broadcast_to_room(server, room_name, OP_GAME_END, end_msg);
         cleanup_finished_game(server, room);
-        printf("🏆 Game over! Winner: %s\n", winner);
+        printf("Game over! Winner: %s\n", winner);
     }
 }
 
+/**
+ * Handles a multi-jump move sequence in checkers.
+ * Validates and applies a chain of jumps as a single move.
+ * Used when a player must make multiple consecutive captures.
+ *
+ * Protocol format: "room_name,player_name,path_length,r1,c1,r2,c2,r3,c3,..."
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the client making the multi-move
+ * @param data Multi-move data containing the complete path
+ */
 void handle_multi_move(Server *server, Client *client, const char *data) {
     if (!client->logged_in || client->current_room[0] == '\0') {
         send_message(client->socket, OP_ERROR, "Not in a game");
@@ -1332,12 +1647,12 @@ void handle_multi_move(Server *server, Client *client, const char *data) {
     char player_name[MAX_PLAYER_NAME];
     int path_length;
 
-    // Парсити перші 3 поля
+    // Parse first three fields
     int parsed = sscanf(data, "%[^,],%[^,],%d", room_name, player_name, &path_length);
 
     if (parsed != 3 || path_length < 2 || path_length > 20) {
         send_message(client->socket, OP_INVALID_MOVE, "Invalid multi-move format");
-        printf("❌ Parse error: parsed=%d, path_length=%d\n", parsed, path_length);
+        printf("Parse error: parsed=%d, path_length=%d\n", parsed, path_length);
         return;
     }
 
@@ -1349,37 +1664,35 @@ void handle_multi_move(Server *server, Client *client, const char *data) {
         return;
     }
 
-    int path[20][2]; // Максимум 20 позицій
+    int path[20][2];  // Maximum 20 positions
     const char *ptr = data;
 
-    // Пропустити перші 3 поля
+    // Skip first three fields
     for (int i = 0; i < 3; i++) {
         ptr = strchr(ptr, ',');
         if (!ptr) {
             send_message(client->socket, OP_INVALID_MOVE, "Invalid path data");
             return;
         }
-        ptr++; // Пропустити кому
+        ptr++; // // Skip comma
     }
 
-    // Парсити координати
+    // // Parse coordinate pairs
     for (int i = 0; i < path_length; i++) {
         if (sscanf(ptr, "%d,%d", &path[i][0], &path[i][1]) != 2) {
             send_message(client->socket, OP_INVALID_MOVE, "Invalid coordinates");
-            printf("❌ Failed to parse position %d\n", i);
+            printf("Failed to parse position %d\n", i);
             return;
         }
 
-        printf("  Position %d: (%d, %d)\n", i, path[i][0], path[i][1]);
-
-        // Перейти до наступної пари
+        printf("Position %d: (%d, %d)\n", i, path[i][0], path[i][1]);
         ptr = strchr(ptr, ',');
         if (ptr) ptr++;
         ptr = strchr(ptr, ',');
         if (ptr && i < path_length - 1) ptr++;
     }
 
-    // Валідувати та застосувати ланцюжок ходів
+    // // Validate and apply the chain of moves
     printf("\n=== VALIDATING MULTI-MOVE CHAIN ===\n");
 
     for (int i = 0; i < path_length - 1; i++) {
@@ -1393,35 +1706,43 @@ void handle_multi_move(Server *server, Client *client, const char *data) {
         print_board(&room->game);
         if (!validate_move(&room->game, from_row, from_col, to_row, to_col, player_name)) {
             send_message(client->socket, OP_INVALID_MOVE, "Invalid move in chain");
-            printf("❌ Step %d failed validation\n", i + 1);
+            printf("Step %d failed validation\n", i + 1);
             return;
         }
 
-        // Застосувати крок
+        // Apply move
         apply_move(&room->game, from_row, from_col, to_row, to_col);
-        printf("✅ Step %d applied\n", i + 1);
+        printf("Step %d applied\n", i + 1);
     }
 
     printf("=== MULTI-MOVE CHAIN COMPLETED ===\n\n");
 
-    // Змінити хід
+    // Change turn
     change_turn(&room->game);
 
-    // Відправити оновлену дошку
+    // Send updated board
     char *board_json = game_board_to_json(&room->game);
     broadcast_to_room(server, room_name, OP_GAME_STATE, board_json);
 
-    // Перевірити кінець гри
+    // Check for game over
     char winner[MAX_PLAYER_NAME];
     if (check_game_over(&room->game, winner)) {
         char end_msg[256];
         snprintf(end_msg, sizeof(end_msg), "%s,no_pieces", winner);
         broadcast_to_room(server, room_name, OP_GAME_END, end_msg);
         cleanup_finished_game(server, room);
-        printf("🏆 Game over! Winner: %s\n", winner);
+        printf("Game over! Winner: %s\n", winner);
     }
 }
 
+/**
+ * Cleans up a finished game.
+ * Removes all players from the room, transitions them to lobby,
+ * and destroys the room structure.
+ *
+ * @param server Pointer to the server
+ * @param room Pointer to the room to clean up
+ */
 void cleanup_finished_game(Server *server, Room *room) {
     printf("Cleaning up finished game in room: %s\n", room->name);
 
@@ -1449,6 +1770,15 @@ void cleanup_finished_game(Server *server, Room *room) {
 }
 
 
+/**
+ * Handles player request to leave a room.
+ *
+ * Protocol format: "room_name,player_name"
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the client leaving
+ * @param data Leave request data
+ */
 void handle_leave_room(Server *server, Client *client, const char *data) {
     char room_name[MAX_ROOM_NAME];
     char player_name[MAX_PLAYER_NAME];
@@ -1467,12 +1797,28 @@ void handle_leave_room(Server *server, Client *client, const char *data) {
     log_client(client);
 }
 
+/**
+ * Handles PING message from client.
+ * Responds with PONG to maintain connection.
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the client that sent PING
+ */
 void handle_ping(Server *server, Client *client) {
     (void)server;
     send_message(client->socket, OP_PONG, "");
     printf("PONG TO SOCKET %d\n", client->socket);
 }
 
+/**
+ * Handles request for list of available rooms.
+ * Returns JSON array of room information.
+ *
+ * Response format: [{"id":1,"name":"Room1","players":1},...]
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the requesting client
+ */
 void handle_list_rooms(Server *server, Client *client) {
     pthread_mutex_lock(&server->rooms_mutex);
 
@@ -1507,6 +1853,17 @@ void handle_list_rooms(Server *server, Client *client) {
     printf("Sent rooms list to client: %s\n", json);
 }
 
+/**
+ * Main client handler thread.
+ * Processes incoming messages from a client connection.
+ * Implements TCP stream parsing with message buffering to handle partial receives.
+ * Handles client disconnection detection and reconnection logic.
+ *
+ * Message format: Messages are delimited by newline characters (\n)
+ *
+ * @param arg Pointer to ClientThreadArgs structure
+ * @return NULL when thread exits
+ */
 void* client_handler(void *arg) {
     ClientThreadArgs *args = (ClientThreadArgs*)arg;
     Server *server = args->server;
@@ -1521,6 +1878,7 @@ void* client_handler(void *arg) {
 
     while (server->running) {
         pthread_mutex_lock(&server->clients_mutex);
+        // Find client structure for this socket
         Client *client = NULL;
         for (int i = 0; i < MAX_CLIENTS; i++) {
             if (server->clients[i].active &&
@@ -1538,6 +1896,7 @@ void* client_handler(void *arg) {
         }
 
         pthread_mutex_lock(&client->state_mutex);
+        // Check client state
         bool is_active = client->active;
         ClientState state = client->state;
         pthread_mutex_unlock(&client->state_mutex);
@@ -1545,7 +1904,7 @@ void* client_handler(void *arg) {
         if (!is_active) {
             printf("Client inactive for socket %d\n", my_socket);
 
-            // Перевірити чи сокет був переданий
+            // Check if socket was transferred to another client
             pthread_mutex_lock(&server->clients_mutex);
             Client *check = NULL;
             for (int i = 0; i < MAX_CLIENTS; i++) {
@@ -1558,7 +1917,7 @@ void* client_handler(void *arg) {
 
             if (!check) {
                 printf("Socket %d transferred, exiting\n", my_socket);
-                return NULL;  // Не закривати сокет
+                return NULL; // Don't close socket (transferred to another thread)
             }
 
             close(my_socket);
@@ -1571,11 +1930,12 @@ void* client_handler(void *arg) {
             return NULL;
         }
 
-        // ========== ЧИТАТИ ДАНІ ==========
+        // ========== READ DATA ==========
         memset(recv_buffer, 0, BUFFER_SIZE);
         int bytes = recv(my_socket, recv_buffer, BUFFER_SIZE - 1, 0);
 
         if (bytes <= 0) {
+            // Connection closed or error
             printf("📡 Connection closed on socket %d (bytes=%d)\n",
                    my_socket, bytes);
 
@@ -1595,15 +1955,18 @@ void* client_handler(void *arg) {
                 return NULL;
             }
 
-            // ========== ОБРОБИТИ ВІДКЛЮЧЕННЯ ==========
+            // Handle disconnection
             handle_client_disconnect(server, disconnect_client, my_socket);
             return NULL;
         }
 
-        // ========== ОБРОБКА ПОВІДОМЛЕНЬ ==========
+        // ========== PROCESS MESSAGES ==========
+        // TCP stream may contain partial messages or multiple messages
+        // Buffer until we find complete messages (delimited by \n)
         for (int i = 0; i < bytes; i++) {
             char current_char = recv_buffer[i];
 
+            // Prevent buffer overflow
             if ((size_t)message_pos >= sizeof(message_buffer) - 1) {
                 fprintf(stderr, "SECURITY: Buffer overflow from socket %d\n",
                         my_socket);
@@ -1628,10 +1991,10 @@ void* client_handler(void *arg) {
 
             message_buffer[message_pos++] = current_char;
 
+            // Complete message received (newline delimiter)
             if (current_char == '\n') {
                 message_buffer[message_pos - 1] = '\0';
-
-                // ✅ Знайти клієнта ЗНОВУ (міг змінитись після reconnect!)
+                // Find client again (may have changed after reconnect)
                 pthread_mutex_lock(&server->clients_mutex);
                 Client *msg_client = NULL;
                 for (int j = 0; j < MAX_CLIENTS; j++) {
@@ -1652,19 +2015,19 @@ void* client_handler(void *arg) {
 
                 Message msg;
                 DisconnectReason disconnect_reason;
-
+                // Parse message according to protocol
                 int parse_result = parse_message(message_buffer, &msg,
                                                  &disconnect_reason);
 
                 if (parse_result == 0) {
                     log_message("RECV", &msg);
-
+                    // Validate operation is allowed in current state
                     if (!validate_operation(server, msg_client, msg.op)) {
                         message_pos = 0;
                         memset(message_buffer, 0, sizeof(message_buffer));
                         continue;
                     }
-
+                    // Dispatch to appropriate handler
                     switch (msg.op) {
                         case OP_LOGIN:
                             handle_login(server, msg_client, msg.data);
@@ -1702,6 +2065,7 @@ void* client_handler(void *arg) {
                             break;
                     }
                 } else {
+                    // Message parsing failed
                     fprintf(stderr, "Failed to parse message from socket %d\n",
                             my_socket);
 
@@ -1712,7 +2076,7 @@ void* client_handler(void *arg) {
                         return NULL;
                     }
                 }
-
+                // Reset buffer for next message
                 message_pos = 0;
                 memset(message_buffer, 0, sizeof(message_buffer));
             }
@@ -1722,6 +2086,16 @@ void* client_handler(void *arg) {
     return NULL;
 }
 
+/**
+ * Handles client disconnection detected by the client handler thread.
+ * Differentiates between anonymous and logged-in clients:
+ * - Anonymous clients are removed immediately
+ * - Logged-in clients are marked as disconnected and preserved for reconnection
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the disconnected client
+ * @param socket Socket that was disconnected
+ */
 void handle_client_disconnect(Server *server, Client *client, int socket) {
     printf("handle_client_disconnect for %s (socket %d)\n",
            client->client_id[0] ? client->client_id : "anonymous", socket);
@@ -1753,12 +2127,18 @@ void handle_client_disconnect(Server *server, Client *client, int socket) {
 
     printf("Client '%s' marked as DISCONNECTED (preserved for %ld sec)\n",
            client->client_id, LONG_DISCONNECT_THRESHOLD_SEC);
-
-    // if (client->current_room[0] != '\0') {
-    //     handle_player_disconnect(server, client);
-    // }
 }
 
+/**
+ * Validates if an operation is allowed in the client's current game state.
+ * Implements state machine validation to prevent protocol violations.
+ * Tracks violations and disconnects clients that repeatedly attempt invalid operations.
+ *
+ * @param server Pointer to the server
+ * @param client Pointer to the client attempting the operation
+ * @param op Operation code to validate
+ * @return true if operation is allowed, false otherwise
+ */
 bool validate_operation(Server *server, Client *client, OpCode op) {
     if (!is_operation_allowed(client->game_state, op)) {
         log_invalid_operation_attempt(client, op);
@@ -1792,6 +2172,13 @@ bool validate_operation(Server *server, Client *client, OpCode op) {
     return true;
 }
 
+/**
+ * Starts the server and begins accepting client connections.
+ * Spawns the heartbeat monitoring thread and enters the main accept loop.
+ * For each new connection, creates a client structure and spawns a handler thread.
+ *
+ * @param server Pointer to the server to start
+ */
 void server_start(Server *server) {
     server->running = true;
 
@@ -1856,6 +2243,13 @@ void server_start(Server *server) {
     }
 }
 
+/**
+ * Stops the server and cleans up all resources.
+ * Cancels the heartbeat thread, closes all client connections,
+ * destroys all mutexes, and closes the server socket.
+ *
+ * @param server Pointer to the server to stop
+ */
 void server_stop(Server *server) {
     server->running = false;
 
@@ -1886,11 +2280,26 @@ void server_stop(Server *server) {
     printf("Server stopped\n");
 }
 
-
+/**
+ * Logs client information for debugging purposes.
+ *
+ * @param client Pointer to the client to log
+ */
 void log_client(const Client *client) {
     printf("[%d] CLIENT_ID=%s THREAD=%d ACTIVE=%d LOGGED=%d ROOM=%s \n", client->socket, client->client_id, client->thread, client->active, client->logged_in, client->current_room);
 }
 
+/**
+ * Logs an invalid operation attempt for security monitoring.
+ * Prints detailed information about the violation including:
+ * - Client identity
+ * - Current state
+ * - Attempted operation
+ * - List of allowed operations in current state
+ *
+ * @param client Pointer to the client that attempted the invalid operation
+ * @param attempted_op Operation code that was attempted
+ */
 void log_invalid_operation_attempt(Client *client, OpCode attempted_op) {
     fprintf(stderr, "\n");
     fprintf(stderr, "═══════════════════════════════════════════════════\n");
