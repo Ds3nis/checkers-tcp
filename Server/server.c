@@ -1511,7 +1511,7 @@ void handle_join_room(Server *server, Client *client, const char *data) {
         send_message(client->socket, OP_ROOM_FAIL, "Room not found");
         return;
     } else if (result == -2) {
-        send_message(client->socket, OP_ROOM_FAIL, "Room is full");
+        send_message(client->socket, OP_ROOM_FULL, "Room is full");
         return;
     } else if (result == -3) {
         send_message(client->socket, OP_ROOM_FAIL, "You are already in this room");
