@@ -22,6 +22,30 @@ import java.net.URL;
 import java.time.LocalTime;
 import java.util.*;
 
+/**
+ * Controller for the main game view.
+ * Manages the checkers game board, player interactions, move validation,
+ * server communication, and reconnection handling.
+ *
+ * <p>Key responsibilities:
+ * <ul>
+ *   <li>Game board visualization and interaction</li>
+ *   <li>Move execution and server synchronization</li>
+ *   <li>Turn management and validation</li>
+ *   <li>Player information panels</li>
+ *   <li>Connection loss handling and reconnection</li>
+ *   <li>Game state synchronization with server</li>
+ *   <li>Opponent disconnect/reconnect notifications</li>
+ *   <li>Move history tracking</li>
+ * </ul>
+ *
+ * <p>Board orientation:
+ * <ul>
+ *   <li>WHITE players see board in standard orientation</li>
+ *   <li>BLACK players see rotated board (180 degrees)</li>
+ *   <li>All moves are translated to server coordinates</li>
+ * </ul>
+ */
 public class GameController implements Initializable {
 
     @FXML
@@ -78,9 +102,19 @@ public class GameController implements Initializable {
 
     private List<PlayerMoveItem> moveHistory = new ArrayList<>();
     private Move pendingMove;
+
+    // Deferred server state application (wait for animation to finish)
     private int[][] deferredServerState;
     private ConnectionStatusDialog reconnectDialog;
 
+    /**
+     * Initializes the controller.
+     * Sets up the game board, message handlers, UI components,
+     * and connection callbacks.
+     *
+     * @param location URL location (unused)
+     * @param resources ResourceBundle (unused)
+     */
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         clientManager = ClientManager.getInstance();
@@ -99,6 +133,7 @@ public class GameController implements Initializable {
         setupGameInfoPanels();
         updateConnectionStatus();
 
+        // Apply deferred state after animation completes
         board.setOnAnimationFinished(() -> {
             if (deferredServerState != null) {
                 System.out.println("Applying deferred server state");
@@ -109,6 +144,10 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Sets up callbacks for board interactions.
+     * Handles move attempts and piece selection events.
+     */
     private void setupBoardCallbacks() {
         board.setOnMoveAttempt(move -> {
             if (!isMyTurn) {
@@ -127,18 +166,22 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Sets up reconnection callbacks for connection loss handling.
+     * Manages UI state during disconnection and reconnection attempts.
+     */
     private void setupReconnectCallbacks() {
         clientManager.setOnConnectionLost(() -> {
             Platform.runLater(() -> {
                 System.out.println("Connection lost in game!");
                 reconnectDialog.show();
 
+                // Disable board during reconnection
                 if (board != null) {
                     board.setDisable(true);
                 }
             });
         });
-
 
         clientManager.setOnReconnectSuccess(() -> {
             Platform.runLater(() -> {
@@ -173,6 +216,10 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Registers message handlers for server protocol messages.
+     * Maps OpCodes to their respective handler methods.
+     */
     private void setupMessageHandlers() {
         clientManager.registerMessageHandler(OpCode.GAME_START, this::handleGameStart);
         clientManager.registerMessageHandler(OpCode.GAME_STATE, this::handleGameState);
@@ -185,6 +232,14 @@ public class GameController implements Initializable {
         clientManager.registerMessageHandler(OpCode.GAME_RESUMED, this::handleGameResumed);
     }
 
+    /**
+     * Handles opponent disconnection notification.
+     * Disables board and displays waiting dialog.
+     *
+     * Protocol format: "room_name,player_name"
+     *
+     * @param message PLAYER_DISCONNECTED message from server
+     */
     private void handleOpponentDisconnected(Message message) {
         Platform.runLater(() -> {
             String[] parts = message.getData().split(",");
@@ -206,6 +261,14 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Handles opponent reconnection notification.
+     * Re-enables board and displays success message.
+     *
+     * Protocol format: "room_name,player_name"
+     *
+     * @param message PLAYER_RECONNECTED message from server
+     */
     private void handleOpponentReconnected(Message message) {
         Platform.runLater(() -> {
             String[] parts = message.getData().split(",");
@@ -226,6 +289,12 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Handles game pause notification.
+     * Disables board interaction during pause.
+     *
+     * @param message GAME_PAUSED message containing room name
+     */
     private void handleGamePaused(Message message) {
         Platform.runLater(() -> {
             String roomName = message.getData();
@@ -240,6 +309,12 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Handles game resume notification.
+     * Re-enables board and updates turn indicator.
+     *
+     * @param message GAME_RESUMED message containing room name
+     */
     private void handleGameResumed(Message message) {
         Platform.runLater(() -> {
             String roomName = message.getData();
@@ -254,6 +329,7 @@ public class GameController implements Initializable {
 
             updateTurnIndicator();
 
+            // Clear status message after 2 seconds
             javafx.animation.PauseTransition pause =
                     new javafx.animation.PauseTransition(javafx.util.Duration.seconds(2));
             pause.setOnFinished(e -> updateTurnIndicator());
@@ -261,6 +337,14 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Handles game start notification from server.
+     * Initializes game state with player colors and turn order.
+     *
+     * Protocol format: "room_name,player1,player2,first_turn"
+     *
+     * @param message GAME_START message from server
+     */
     private void handleGameStart(Message message) {
         Platform.runLater(() -> {
             String[] parts = message.getData().split(",");
@@ -291,6 +375,22 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Handles board state update from server.
+     * Parses JSON board state, applies board rotation for BLACK player,
+     * and synchronizes with local board state.
+     *
+     * <p>Synchronization strategy:
+     * <ul>
+     *   <li>If animation in progress: Defer state update until animation completes</li>
+     *   <li>If boards match: Skip update to avoid unnecessary rendering</li>
+     *   <li>Otherwise: Apply server state immediately</li>
+     * </ul>
+     *
+     * Protocol format: JSON with board array and current_turn field
+     *
+     * @param message GAME_STATE message from server
+     */
     private void handleGameState(Message message) {
         Platform.runLater(() -> {
             try {
@@ -303,11 +403,13 @@ public class GameController implements Initializable {
                 System.out.println("My turn:" + isMyTurn);
                 System.out.println(Arrays.deepToString(board.getBoardState()));
 
+                // Rotate board for BLACK player perspective
                 if (myColor == PieceColor.BLACK) {
                     boardState = BoardRotation.rotateBoard(boardState);
                     System.out.println("Board rotated for BLACK player");
                 }
 
+                // Defer sync if animation in progress
                 if (board.isAnimating()) {
                     System.out.println("Animation in progress, deferring sync");
                     deferredServerState = boardState;
@@ -316,6 +418,7 @@ public class GameController implements Initializable {
 
                 syncBoardIfNeeded(boardState);
 
+                // Update turn indicator
                 String currentTurnPlayer = GameStateParser.getJsonValue(jsonData, "current_turn");
                 System.out.println("Current turn player: " + currentTurnPlayer);
                 if (currentTurnPlayer != null) {
@@ -336,6 +439,12 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Synchronizes local board with server state if they differ.
+     * Compares boards element-by-element before applying changes.
+     *
+     * @param serverState Board state from server
+     */
     private void syncBoardIfNeeded(int[][] serverState) {
         int[][] localState = board.getBoardState();
 
@@ -348,6 +457,13 @@ public class GameController implements Initializable {
         board.setBoardState(serverState);
     }
 
+    /**
+     * Checks if two board states are identical.
+     *
+     * @param a First board state
+     * @param b Second board state
+     * @return true if boards are equal
+     */
     private boolean boardsEqual(int[][] a, int[][] b) {
         if (a.length != b.length) return false;
 
@@ -359,6 +475,12 @@ public class GameController implements Initializable {
         return true;
     }
 
+    /**
+     * Handles invalid move notification from server.
+     * Restores player's turn and displays error message.
+     *
+     * @param message INVALID_MOVE message with reason
+     */
     private void handleInvalidMove(Message message) {
         Platform.runLater(() -> {
             showError("Neplatný tah: " + message.getData());
@@ -368,6 +490,14 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Handles game end notification from server.
+     * Displays result dialog and returns to lobby.
+     *
+     * Protocol format: "winner_name,reason"
+     *
+     * @param message GAME_END message from server
+     */
     private void handleGameEnd(Message message) {
         Platform.runLater(() -> {
             String[] parts = message.getData().split(",");
@@ -387,6 +517,14 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Handles player left notification.
+     * Displays notification and returns to lobby.
+     *
+     * Protocol format: "room_name,player_name"
+     *
+     * @param message ROOM_LEFT message from server
+     */
     private void handlePlayerLeft(Message message) {
         String[] parts = message.getData().split(",");
         String roomName = parts[0];
@@ -403,7 +541,12 @@ public class GameController implements Initializable {
         });
     }
 
-
+    /**
+     * Sends move to server with appropriate coordinate transformation.
+     * Routes to single-move or multi-move handler based on move type.
+     *
+     * @param move Move to send
+     */
     private void sendMoveToServer(Move move) {
         if (clientManager.isConnected() && roomName != null) {
             if (move.isMultiCapture() && move.getPath().size() > 0) {
@@ -414,12 +557,20 @@ public class GameController implements Initializable {
         }
     }
 
+    /**
+     * Sends single move to server.
+     * Rotates coordinates for BLACK player before transmission.
+     * Executes local animation and adds move to history.
+     *
+     * @param move Single move to send
+     */
     private void sendSingleMoveToServer(Move move) {
         int fromRow = move.getFromRow();
         int fromCol = move.getFromCol();
         int toRow = move.getToRow();
         int toCol = move.getToCol();
 
+        // Rotate coordinates for BLACK player
         if (myColor == PieceColor.BLACK) {
             BoardRotation.RotatedMove rotated = BoardRotation.rotateCoordinates(
                     fromRow, fromCol, toRow, toCol, 8
@@ -443,23 +594,32 @@ public class GameController implements Initializable {
     }
 
     /**
-     * Відправка мульти-ходу
+     * Sends multi-jump move sequence to server.
+     * Rotates entire path for BLACK player before transmission.
+     *
+     * <p>Path construction:
+     * <ul>
+     *   <li>If path already filled: Use existing path</li>
+     *   <li>If path empty: Construct from start and end positions</li>
+     * </ul>
+     *
+     * @param move Multi-capture move with path
      */
     private void sendMultiMoveToServer(Move move) {
         System.out.println("=== SENDING MULTI-MOVE ===");
 
-        // Отримати шлях руху (включає початок і кінець)
+        // Get move path (includes start and end)
         List<Position> path = move.getPath();
         System.out.println("Path size: " + path.size());
 
-        // Якщо шлях не заповнений - створити його з початку та кінця
+        // Construct path if not filled
         if (path.isEmpty()) {
             path = new ArrayList<>();
             path.add(new Position(move.getFromRow(), move.getFromCol()));
             path.add(new Position(move.getToRow(), move.getToCol()));
         }
 
-        // Якщо чорний гравець - ротувати всі координати
+        // Rotate all coordinates for BLACK player
         List<Position> serverPath = new ArrayList<>();
         if (myColor == PieceColor.BLACK) {
             for (Position pos : path) {
@@ -482,6 +642,12 @@ public class GameController implements Initializable {
         System.out.println("Multi-move sent with " + serverPath.size() + " positions");
     }
 
+    /**
+     * Adds move to history and updates player info panel.
+     * Records timestamp and position information.
+     *
+     * @param move Move to add to history
+     */
     private void addMoveToHistory(Move move) {
         Position from = new Position(move.getFromRow(), move.getFromCol());
         Position to = new Position(move.getToRow(), move.getToCol());
@@ -496,12 +662,16 @@ public class GameController implements Initializable {
 
         moveHistory.add(moveItem);
 
-        // Додати хід тільки на панель поточного гравця
+        // Add move only to current player's panel
         if (myInfoPanel != null) {
             myInfoPanel.addMove(moveItem);
         }
     }
 
+    /**
+     * Updates turn indicator UI elements.
+     * Updates status labels and player info panels based on current turn.
+     */
     private void updateTurnIndicator() {
         if (isMyTurn) {
             netStateLbl.setText("Váš tah!");
@@ -526,6 +696,10 @@ public class GameController implements Initializable {
         }
     }
 
+    /**
+     * Updates connection status display.
+     * Binds status label to ClientManager's status property.
+     */
     private void updateConnectionStatus() {
         clientManager.statusMessageProperty().addListener((obs, oldVal, newVal) -> {
             Platform.runLater(() -> {
@@ -536,8 +710,13 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Sets up player information panels (left and right).
+     * Loads FXML and initializes controllers for both players.
+     */
     private void setupGameInfoPanels() {
         try {
+            // Left panel (current player)
             URL leftPanelUrl = Main.class.getResource("game-info-panel.fxml");
             FXMLLoader leftLoader = new FXMLLoader(leftPanelUrl);
             VBox leftPanel = leftLoader.load();
@@ -548,6 +727,7 @@ public class GameController implements Initializable {
             myInfoPanel.setData(myInfo);
             mainBorderPane.setLeft(leftPanel);
 
+            // Right panel (opponent)
             URL rightPanelUrl = Main.class.getResource("game-info-panel.fxml");
             FXMLLoader rightLoader = new FXMLLoader(rightPanelUrl);
             VBox rightPanel = rightLoader.load();
@@ -565,7 +745,8 @@ public class GameController implements Initializable {
     }
 
     /**
-     * Оновити інформацію на панелях
+     * Updates player information on both info panels.
+     * Displays names, colors, piece counts, and status.
      */
     private void updateInfoPanels() {
         if (myInfoPanel != null && myColor != null) {
@@ -586,7 +767,8 @@ public class GameController implements Initializable {
     }
 
     /**
-     * Оновити кількість шашок на панелях
+     * Updates piece count displays on info panels.
+     * Called after each move to reflect current board state.
      */
     private void updatePiecesCount() {
         if (myInfoPanel != null && myColor != null) {
@@ -601,6 +783,12 @@ public class GameController implements Initializable {
         }
     }
 
+    /**
+     * Counts pieces of specified color on the board.
+     *
+     * @param color Color to count
+     * @return Number of pieces of that color
+     */
     private int countPieces(PieceColor color) {
         int[][] boardState = board.getBoardState();
         int count = 0;
@@ -620,13 +808,19 @@ public class GameController implements Initializable {
         return count;
     }
 
+    /**
+     * Creates slide-out side menu with game options.
+     * Implements smooth animation and overlay darkening.
+     */
     private void createSlideMenu() {
+        // Create overlay layer
         overlayLayer = new StackPane();
         overlayLayer.setStyle("-fx-background-color: rgba(0,0,0,0.5);");
         overlayLayer.setVisible(false);
         overlayLayer.setMouseTransparent(false);
         overlayLayer.setPickOnBounds(true);
 
+        // Create side menu with Catppuccin styling
         sideMenu = new VBox(15);
         sideMenu.setStyle("""
         -fx-background-color: #1e1e2e;
@@ -638,6 +832,7 @@ public class GameController implements Initializable {
         sideMenu.setPrefWidth(250);
         sideMenu.setMaxHeight(Double.MAX_VALUE);
 
+        // Menu header with close button
         HBox menuHeader = new HBox(10);
         menuHeader.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
@@ -660,6 +855,8 @@ public class GameController implements Initializable {
         -fx-cursor: hand;
         -fx-background-radius: 5;
     """);
+
+        // Close button hover effects
         closeBtn.setOnMouseEntered(e -> closeBtn.setStyle("""
         -fx-background-color: #45475a;
         -fx-text-fill: #f38ba8;
@@ -683,6 +880,7 @@ public class GameController implements Initializable {
         Separator separator = new Separator();
         separator.setStyle("-fx-background-color: #45475a;");
 
+        // Menu buttons
         Button leaveBtn = createMenuButton("🚪 Opustit hru", "#f38ba8");
         Button rulesBtn = createMenuButton("📜 Pravidla hry", "#89b4fa");
         Button infoBtn = createMenuButton("ℹ️ Informace o hře", "#a6e3a1");
@@ -714,8 +912,10 @@ public class GameController implements Initializable {
         StackPane.setAlignment(sideMenu, javafx.geometry.Pos.CENTER_RIGHT);
         overlayLayer.getChildren().add(sideMenu);
 
+        // Prevent menu clicks from closing overlay
         sideMenu.setOnMouseClicked(e -> e.consume());
 
+        // Close menu when clicking overlay
         overlayLayer.setOnMouseClicked(e -> {
             if (menuVisible) {
                 toggleMenu();
@@ -726,6 +926,13 @@ public class GameController implements Initializable {
         rootStackPane.getChildren().add(overlayLayer);
     }
 
+    /**
+     * Creates styled menu button with hover effects.
+     *
+     * @param text Button text
+     * @param accentColor Hover accent color
+     * @return Configured button
+     */
     private Button createMenuButton(String text, String accentColor) {
         Button btn = new Button(text);
         btn.setMaxWidth(Double.MAX_VALUE);
@@ -742,6 +949,7 @@ public class GameController implements Initializable {
         -fx-alignment: CENTER_LEFT;
     """));
 
+        // Hover effect
         btn.setOnMouseEntered(e -> btn.setStyle(String.format("""
         -fx-background-color: #45475a;
         -fx-text-fill: %s;
@@ -771,8 +979,13 @@ public class GameController implements Initializable {
         return btn;
     }
 
+    /**
+     * Toggles side menu visibility with smooth animations.
+     * Implements fade and slide transitions.
+     */
     private void toggleMenu() {
         if (!menuVisible) {
+            // Show menu
             overlayLayer.setVisible(true);
             overlayLayer.setOpacity(0);
             sideMenu.setTranslateX(250);
@@ -790,6 +1003,7 @@ public class GameController implements Initializable {
 
             menuVisible = true;
         } else {
+            // Hide menu
             FadeTransition fadeOut = new FadeTransition(Duration.millis(300), overlayLayer);
             fadeOut.setFromValue(1);
             fadeOut.setToValue(0);
@@ -807,6 +1021,10 @@ public class GameController implements Initializable {
         }
     }
 
+    /**
+     * Displays game information dialog.
+     * Shows room, colors, opponent, turn status, and move count.
+     */
     private void handleShowGameInfo() {
         toggleMenu();
 
@@ -839,6 +1057,9 @@ public class GameController implements Initializable {
         ).show();
     }
 
+    /**
+     * Displays checkers rules dialog.
+     */
     private void handleShowRules() {
         toggleMenu();
 
@@ -864,6 +1085,10 @@ public class GameController implements Initializable {
         ).show();
     }
 
+    /**
+     * Handles leave game request.
+     * Shows confirmation dialog before leaving.
+     */
     private void handleLeaveGame() {
         toggleMenu();
 
@@ -882,6 +1107,10 @@ public class GameController implements Initializable {
         ).show();
     }
 
+    /**
+     * Returns to lobby view.
+     * Performs full cleanup before scene transition.
+     */
     private void returnToLobby() {
         try {
             fullCleanup();
@@ -893,13 +1122,17 @@ public class GameController implements Initializable {
             stage.setScene(lobbyScene);
             stage.centerOnScreen();
 
-
         } catch (Exception e) {
             System.err.println("Error returning to lobby: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
+    /**
+     * Shows error dialog to user.
+     *
+     * @param message Error message to display
+     */
     private void showError(String message) {
         new GameAlertDialog(
                 AlertVariant.ERROR,
@@ -911,6 +1144,17 @@ public class GameController implements Initializable {
         ).show();
     }
 
+    /**
+     * Initializes game with parameters from server.
+     * Called when game starts or client reconnects.
+     * Applies board rotation for BLACK player.
+     *
+     * @param roomName Name of the game room
+     * @param opponent Opponent player name
+     * @param myColor This player's piece color
+     * @param myTurn Whether it's this player's turn
+     * @param initialBoardState Initial board state from server
+     */
     public void initGame(String roomName, String opponent, PieceColor myColor,
                          boolean myTurn, int[][] initialBoardState) {
         this.roomName = roomName;
@@ -919,6 +1163,7 @@ public class GameController implements Initializable {
         this.isMyTurn = myTurn;
         board.setMyColor(myColor);
 
+        // Rotate board for BLACK player
         final int[][] boardToSet;
         if (myColor == PieceColor.BLACK) {
             boardToSet = BoardRotation.rotateBoard(initialBoardState);
@@ -947,6 +1192,11 @@ public class GameController implements Initializable {
         });
     }
 
+    /**
+     * Performs complete cleanup before leaving game.
+     * Unregisters message handlers and callbacks.
+     * Hides reconnection dialog if visible.
+     */
     public void fullCleanup() {
         clientManager.unregisterMessageHandler(OpCode.GAME_START);
         clientManager.unregisterMessageHandler(OpCode.GAME_STATE);
@@ -968,6 +1218,11 @@ public class GameController implements Initializable {
         }
     }
 
+    /**
+     * Gets this player's piece color.
+     *
+     * @return Player's piece color
+     */
     public PieceColor getMyColor() {
         return myColor;
     }

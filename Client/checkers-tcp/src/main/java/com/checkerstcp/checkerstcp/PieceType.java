@@ -1,5 +1,9 @@
 package com.checkerstcp.checkerstcp;
 
+/**
+ * Types of pieces on the checkers board.
+ * Maps to server protocol integer values.
+ */
 public enum PieceType {
     EMPTY(0),
     WHITE_PIECE(1),
@@ -17,6 +21,12 @@ public enum PieceType {
         return value;
     }
 
+    /**
+     * Converts protocol integer to PieceType.
+     *
+     * @param value Protocol value
+     * @return Corresponding PieceType
+     */
     public static PieceType fromValue(int value) {
         for (PieceType type : values()) {
             if (type.value == value) {

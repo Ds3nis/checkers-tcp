@@ -6,6 +6,27 @@ import javafx.scene.shape.Circle;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.InnerShadow;
 
+/**
+ * Visual representation of a checkers piece on the game board.
+ * Extends StackPane to layer base circle and king marker.
+ *
+ * <p>Features:
+ * <ul>
+ *   <li>Dynamic sizing based on cell dimensions</li>
+ *   <li>King promotion with golden marker overlay</li>
+ *   <li>Selection and hover visual feedback</li>
+ *   <li>Drop shadow and inner shadow effects</li>
+ *   <li>Color differentiation for white/black pieces</li>
+ * </ul>
+ *
+ * <p>Visual styling:
+ * <ul>
+ *   <li>WHITE pieces: Khaki color (#F0E68C)</li>
+ *   <li>BLACK pieces: Saddle brown (#8B4513)</li>
+ *   <li>King marker: Gold with dark golden rod border</li>
+ *   <li>Selection: Yellow border with glow effect</li>
+ * </ul>
+ */
 public class Piece extends StackPane {
     private final PieceType type;
     private final PieceColor color;
@@ -18,6 +39,14 @@ public class Piece extends StackPane {
 
     private static final double PIECE_RADIUS_RATIO = 0.35;
 
+    /**
+     * Constructs a checkers piece.
+     *
+     * @param type Piece type (regular or king)
+     * @param color Piece color (white or black)
+     * @param row Board row position
+     * @param col Board column position
+     */
     public Piece(PieceType type, PieceColor color, int row, int col) {
         this.type = type;
         this.color = color;
@@ -28,17 +57,23 @@ public class Piece extends StackPane {
         createVisuals();
     }
 
+    /**
+     * Creates visual components for the piece.
+     * Sets up base circle with shadow effects and adds king marker if needed.
+     */
     private void createVisuals() {
         baseCircle = new Circle();
         baseCircle.setFill(getPieceColor());
         baseCircle.setStroke(Color.BLACK);
         baseCircle.setStrokeWidth(2);
 
+        // Drop shadow for depth
         DropShadow dropShadow = new DropShadow();
         dropShadow.setRadius(5);
         dropShadow.setOffsetY(2);
         dropShadow.setColor(Color.rgb(0, 0, 0, 0.4));
 
+        // Inner shadow for highlight
         InnerShadow innerShadow = new InnerShadow();
         innerShadow.setRadius(3);
         innerShadow.setOffsetY(-1);
@@ -60,6 +95,10 @@ public class Piece extends StackPane {
         }
     }
 
+    /**
+     * Adds king marker overlay to indicate promoted piece.
+     * Creates smaller golden circle in center of base piece.
+     */
     private void addKingMarker() {
         kingMarker = new Circle();
         kingMarker.setFill(Color.GOLD);
@@ -68,6 +107,11 @@ public class Piece extends StackPane {
         getChildren().add(kingMarker);
     }
 
+    /**
+     * Gets color fill for piece based on color type.
+     *
+     * @return Color for piece fill
+     */
     private Color getPieceColor() {
         return switch (color) {
             case WHITE -> Color.web("#F0E68C");
@@ -75,7 +119,12 @@ public class Piece extends StackPane {
         };
     }
 
-
+    /**
+     * Updates piece size based on cell dimensions.
+     * Maintains proper sizing ratio for piece and king marker.
+     *
+     * @param cellSize Board cell size in pixels
+     */
     public void updateSize(double cellSize) {
         double radius = cellSize * PIECE_RADIUS_RATIO;
         baseCircle.setRadius(radius);
@@ -85,7 +134,10 @@ public class Piece extends StackPane {
         }
     }
 
-
+    /**
+     * Promotes piece to king status.
+     * Adds king marker if not already present.
+     */
     public void promoteToKing() {
         if (!isKing) {
             isKing = true;
@@ -95,7 +147,12 @@ public class Piece extends StackPane {
         }
     }
 
-
+    /**
+     * Sets visual selection state.
+     * Selected pieces show yellow border and glow effect.
+     *
+     * @param selected true to show as selected
+     */
     public void setSelected(boolean selected) {
         if (selected) {
             baseCircle.setStroke(Color.YELLOW);
@@ -117,7 +174,12 @@ public class Piece extends StackPane {
         }
     }
 
-
+    /**
+     * Sets visual hover state.
+     * Hovered pieces scale up slightly.
+     *
+     * @param hovered true to show as hovered
+     */
     public void setHovered(boolean hovered) {
         if (hovered) {
             setScaleX(1.1);
@@ -127,6 +189,8 @@ public class Piece extends StackPane {
             setScaleY(1.0);
         }
     }
+
+    // ========== Getters and Setters ==========
 
     public PieceType getType() {
         return type;
@@ -156,6 +220,12 @@ public class Piece extends StackPane {
         this.col = col;
     }
 
+    /**
+     * Sets piece position on board.
+     *
+     * @param row Board row
+     * @param col Board column
+     */
     public void setPosition(int row, int col) {
         this.row = row;
         this.col = col;

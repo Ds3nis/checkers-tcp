@@ -17,7 +17,34 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Singleton клас для управління підключенням та станом клієнта
+ * Singleton class for managing client connection and application state.
+ * Provides high-level API for game operations and centralizes message handling.
+ *
+ * <p>Responsibilities:
+ * <ul>
+ *   <li>Connection lifecycle management (connect, disconnect, reconnect)</li>
+ *   <li>Message routing and handling</li>
+ *   <li>Game room management (create, join, leave)</li>
+ *   <li>Move transmission (single and multi-move)</li>
+ *   <li>UI state synchronization via JavaFX properties</li>
+ *   <li>Reconnection dialog coordination</li>
+ * </ul>
+ *
+ * <p>Features:
+ * <ul>
+ *   <li>Thread-safe singleton pattern</li>
+ *   <li>Observable connection state and status messages</li>
+ *   <li>Extensible message handler registration system</li>
+ *   <li>Automatic room list caching and updates</li>
+ *   <li>Integrated reconnection UI management</li>
+ * </ul>
+ *
+ * <p>Usage:
+ * <pre>{@code
+ * ClientManager manager = ClientManager.getInstance();
+ * manager.connect("localhost", 12345, "PlayerName");
+ * manager.registerMessageHandler(OpCode.GAME_STATE, this::handleGameState);
+ * }</pre>
  */
 public class ClientManager {
     private static ClientManager instance;
@@ -28,10 +55,10 @@ public class ClientManager {
     private String currentClientId;
     private String currentRoom;
 
-    // Кеш кімнат (оновлюється при отриманні списку)
+    // Room cache (updated when receiving list from server)
     private List<GameRoom> availableRooms = new ArrayList<>();
 
-    // Обробники подій
+    // Event handlers
     private Map<OpCode, Consumer<Message>> messageHandlers = new HashMap<>();
     private List<Consumer<List<GameRoom>>> roomListUpdateHandlers = new ArrayList<>();
 
@@ -41,6 +68,10 @@ public class ClientManager {
     private Runnable onReconnectSuccess;
     private Runnable onReconnectFailed;
 
+    /**
+     * Private constructor for singleton pattern.
+     * Initializes connection, dialog, and sets up handlers.
+     */
     private ClientManager() {
         connection = new ClientConnection();
         reconnectDialog = new ConnectionStatusDialog();
@@ -48,6 +79,12 @@ public class ClientManager {
         setupReconnectHandlers();
     }
 
+    /**
+     * Gets the singleton instance of ClientManager.
+     * Thread-safe lazy initialization.
+     *
+     * @return ClientManager instance
+     */
     public static synchronized ClientManager getInstance() {
         if (instance == null) {
             instance = new ClientManager();
@@ -56,10 +93,11 @@ public class ClientManager {
     }
 
     /**
-     * Налаштування обробників з'єднання
+     * Sets up connection state and message handlers.
+     * Configures callbacks for connection events and incoming messages.
      */
     private void setupConnectionHandlers() {
-        // Обробник зміни стану з'єднання
+        // Connection state change handler
         connection.setConnectionStateHandler(state -> {
             Platform.runLater(() -> {
                 connected.set(state);
@@ -67,17 +105,21 @@ public class ClientManager {
             });
         });
 
-        // Обробник вхідних повідомлень
+        // Incoming message handler
         connection.setMessageHandler(message -> {
             System.out.println("Received: " + message);
             handleMessage(message);
         });
     }
 
+    /**
+     * Sets up reconnection handlers and dialog callbacks.
+     * Configures ReconnectManager callbacks for status updates and outcomes.
+     */
     private void setupReconnectHandlers() {
         ReconnectManager reconnectManager = connection.getReconnectManager();
 
-        // Оновлення статусу реконекту
+        // Reconnection status update handler
         reconnectManager.setOnStatusUpdate(status -> {
             int attempts = reconnectManager.getReconnectAttempts();
             long duration = reconnectManager.getDisconnectDuration() / 1000;
@@ -88,7 +130,7 @@ public class ClientManager {
 
             Platform.runLater(() -> {
                 reconnectDialog.updateConnectionStatus(status, attempts, duration);
-
+                // Update status message based on reconnection phase
                 switch (status) {
                     case SHORT_DISCONNECT:
                         statusMessage.set("Přepojování... (pokus " + attempts + ")");
@@ -109,6 +151,7 @@ public class ClientManager {
             });
         });
 
+        // Reconnection success handler
         reconnectManager.setOnReconnectSuccess(() -> {
             Platform.runLater(() -> {
                 System.out.println("Reconnect successful");
@@ -118,6 +161,7 @@ public class ClientManager {
             });
         });
 
+        // Reconnection failure handler
         reconnectManager.setOnReconnectFailed(() -> {
             Platform.runLater(() -> {
                 System.err.println("Reconnect failed");
@@ -127,6 +171,7 @@ public class ClientManager {
             });
         });
 
+        // Dialog cancel button handler
         reconnectDialog.setOnCancel(() -> {
             reconnectManager.stopReconnect();
             if (onReconnectFailed != null) {
@@ -134,6 +179,7 @@ public class ClientManager {
             }
         });
 
+        // Dialog manual reconnect button handler
         reconnectDialog.setOnManualReconnect(() -> {
             System.out.println("Manual reconnect triggered from UI");
             boolean success = reconnectManager.manualReconnect();
@@ -146,7 +192,13 @@ public class ClientManager {
     }
 
     /**
-     * Підключення до сервера
+     * Connects to the game server.
+     * Initiates connection, sends login, and transitions to lobby state.
+     *
+     * @param host Server hostname or IP address
+     * @param port Server port number
+     * @param clientId Unique client identifier
+     * @return true if connection successful, false otherwise
      */
     public boolean connect(String host, int port, String clientId) {
         if (connection.isConnected()) {
@@ -159,7 +211,8 @@ public class ClientManager {
     }
 
     /**
-     * Відключення від сервера
+     * Disconnects from the server.
+     * Clears room state, closes connection, and hides reconnection dialog.
      */
     public void disconnect() {
         connection.disconnect();
@@ -170,16 +223,19 @@ public class ClientManager {
 
 
     /**
-     * Обробка вхідних повідомлень
+     * Handles incoming messages from server.
+     * Routes messages to registered handlers and performs global message processing.
+     *
+     * @param message Message to handle
      */
     private void handleMessage(Message message) {
-        // Викликаємо зареєстрований обробник для цього OpCode
+        // Invoke registered handler for this OpCode
         Consumer<Message> handler = messageHandlers.get(message.getOpCode());
         if (handler != null) {
             Platform.runLater(() -> handler.accept(message));
         }
 
-        // Глобальна обробка деяких повідомлень
+        // Global message handling
         switch (message.getOpCode()) {
             case LOGIN_OK:
                 Platform.runLater(() -> {
@@ -268,6 +324,11 @@ public class ClientManager {
         }
     }
 
+
+    /**
+     * Handles connection loss event.
+     * Shows reconnection dialog and triggers callback.
+     */
     private void handleConnectionLost() {
         System.err.println("Connection lost detected in ClientManager");
 
@@ -278,6 +339,13 @@ public class ClientManager {
         }
     }
 
+
+    /**
+     * Handles opponent disconnection notification.
+     * Displays opponent disconnect dialog with waiting message.
+     *
+     * @param message PLAYER_DISCONNECTED message with room and player info
+     */
     private void handlePlayerDisconnected(Message message) {
         String[] parts = message.getData().split(",");
         if (parts.length >= 2) {
@@ -292,6 +360,12 @@ public class ClientManager {
         }
     }
 
+    /**
+     * Handles opponent reconnection notification.
+     * Displays opponent reconnect success dialog.
+     *
+     * @param message PLAYER_RECONNECTED message with room and player info
+     */
     private void handlePlayerReconnected(Message message) {
         String[] parts = message.getData().split(",");
         if (parts.length >= 2) {
@@ -307,6 +381,12 @@ public class ClientManager {
     }
 
 
+    /**
+     * Handles game paused notification.
+     * Updates status to indicate game pause.
+     *
+     * @param message GAME_PAUSED message with room name
+     */
     private void handleGamePaused(Message message) {
         Platform.runLater(() -> {
             System.out.println("Game paused in room: " + message.getData());
@@ -314,6 +394,12 @@ public class ClientManager {
         });
     }
 
+    /**
+     * Handles game resumed notification.
+     * Updates status to indicate game continuation.
+     *
+     * @param message GAME_RESUMED message with room name
+     */
     private void handleGameResumed(Message message) {
         Platform.runLater(() -> {
             System.out.println("Game resumed in room: " + message.getData());
@@ -321,6 +407,12 @@ public class ClientManager {
         });
     }
 
+    /**
+     * Handles successful reconnection confirmation.
+     * Hides dialog, updates room state, and confirms to ReconnectManager.
+     *
+     * @param message RECONNECT_OK message with room name
+     */
     private void handleReconnectOk(Message message) {
         Platform.runLater(() -> {
             String roomName = message.getData();
@@ -333,6 +425,12 @@ public class ClientManager {
         });
     }
 
+    /**
+     * Handles failed reconnection notification.
+     * Confirms failure to ReconnectManager and triggers callback.
+     *
+     * @param message RECONNECT_FAIL message with failure reason
+     */
     private void handleReconnectFail(Message message) {
         Platform.runLater(() -> {
             System.err.println("Failed to reconnect to game: " + message.getData());
@@ -346,6 +444,12 @@ public class ClientManager {
         });
     }
 
+    /**
+     * Handles room creation confirmation.
+     * Requests updated room list from server.
+     *
+     * @param message ROOM_CREATED message
+     */
     private void handleRoomCreated(Message message) {
         Platform.runLater(() -> {
             statusMessage.set("Room created successfully");
@@ -353,6 +457,12 @@ public class ClientManager {
         });
     }
 
+    /**
+     * Handles room list update from server.
+     * Parses JSON room list and notifies registered handlers.
+     *
+     * @param message ROOMS_LIST message with JSON array
+     */
     private void handleRoomsList(Message message) {
         Platform.runLater(() -> {
             try {
@@ -366,6 +476,15 @@ public class ClientManager {
         });
     }
 
+    /**
+     * Parses JSON room list from server.
+     * Manually parses simple JSON format without external library.
+     *
+     * Format: [{"id":1,"name":"Room1","players":1},...]
+     *
+     * @param jsonData JSON string to parse
+     * @return List of GameRoom objects
+     */
     private List<GameRoom> parseRoomsList(String jsonData) {
         List<GameRoom> rooms = new ArrayList<>();
 
@@ -433,8 +552,14 @@ public class ClientManager {
     }
 
 
+    /**
+     * Parses room joined response data.
+     * Format: room_name,players_count
+     *
+     * @param data Response data to parse
+     */
     private void parseRoomJoined(String data) {
-        // Формат: room_name,players_count
+        // Format: room_name,players_count
         String[] parts = data.split(",");
         if (parts.length >= 1) {
             currentRoom = parts[0];
@@ -445,6 +570,9 @@ public class ClientManager {
     }
 
 
+    /**
+     * Requests current room list from server.
+     */
     public void requestRoomsList() {
         if (connection.isConnected()) {
             connection.sendListRooms();
@@ -453,13 +581,21 @@ public class ClientManager {
     }
 
     /**
-     * Оновлення списку кімнат (викликається при отриманні LIST_ROOMS від сервера)
+     * Updates room list cache and notifies handlers.
+     * Called when receiving room list from server.
+     *
+     * @param rooms New list of available rooms
      */
     public void updateRoomsList(List<GameRoom> rooms) {
         this.availableRooms = new ArrayList<>(rooms);
         notifyRoomListUpdate(rooms);
     }
 
+    /**
+     * Notifies all registered room list update handlers.
+     *
+     * @param rooms Current room list
+     */
     private void notifyRoomListUpdate(List<GameRoom> rooms) {
         for (Consumer<List<GameRoom>> handler : roomListUpdateHandlers) {
             handler.accept(new ArrayList<>(rooms));
@@ -468,6 +604,11 @@ public class ClientManager {
 
     // ========== API methods ==========
 
+    /**
+     * Creates a new game room.
+     *
+     * @param roomName Name for the new room
+     */
     public void createRoom(String roomName) {
         if (!connection.isConnected()) {
             System.err.println("Not connected");
@@ -476,6 +617,11 @@ public class ClientManager {
         connection.sendCreateRoom(currentClientId, roomName);
     }
 
+    /**
+     * Joins an existing game room.
+     *
+     * @param roomName Name of room to join
+     */
     public void joinRoom(String roomName) {
         if (!connection.isConnected()) {
             System.err.println("Not connected");
@@ -484,6 +630,9 @@ public class ClientManager {
         connection.sendJoinRoom(currentClientId, roomName);
     }
 
+    /**
+     * Leaves current game room.
+     */
     public void leaveRoom() {
         if (!connection.isConnected() || currentRoom == null) {
             System.err.println("Not in a room");
@@ -493,6 +642,14 @@ public class ClientManager {
         currentRoom = null;
     }
 
+    /**
+     * Sends a single move to the server.
+     *
+     * @param fromRow Source row coordinate
+     * @param fromCol Source column coordinate
+     * @param toRow Destination row coordinate
+     * @param toCol Destination column coordinate
+     */
     public void sendMove(int fromRow, int fromCol, int toRow, int toCol) {
         if (!connection.isConnected() || currentRoom == null) {
             System.err.println("Not in a game");
@@ -501,6 +658,11 @@ public class ClientManager {
         connection.sendMove(currentRoom, currentClientId, fromRow, fromCol, toRow, toCol);
     }
 
+    /**
+     * Sends a multi-jump move sequence to the server.
+     *
+     * @param path List of positions in the jump sequence (minimum 2)
+     */
     public void sendMultiMove(List<Position> path){
         if (!connection.isConnected() || currentRoom == null) {
             System.err.println("Not in a game");
@@ -515,69 +677,149 @@ public class ClientManager {
         connection.sendMultiMove(currentRoom, currentClientId, path);
     }
 
+    /**
+     * Sends a PING to test connection.
+     */
     public void ping() {
         if (connection.isConnected()) {
             connection.sendPing();
         }
     }
 
-    // ========== Реєстрація обробників ==========
+    // ========== Handler Registration ==========
 
+    /**
+     * Registers a message handler for specific OpCode.
+     * Handler will be invoked on JavaFX Application Thread.
+     *
+     * @param opCode Operation code to handle
+     * @param handler Consumer that processes the message
+     */
     public void registerMessageHandler(OpCode opCode, Consumer<Message> handler) {
         messageHandlers.put(opCode, handler);
     }
 
+    /**
+     * Unregisters a message handler for specific OpCode.
+     *
+     * @param opCode Operation code to unregister
+     */
     public void unregisterMessageHandler(OpCode opCode) {
         messageHandlers.remove(opCode);
     }
 
+    /**
+     * Adds a room list update handler.
+     * Handler is invoked whenever room list is updated from server.
+     *
+     * @param handler Consumer that processes room list updates
+     */
     public void addRoomListUpdateHandler(Consumer<List<GameRoom>> handler) {
         roomListUpdateHandlers.add(handler);
     }
 
+    /**
+     * Adds a room list update handler.
+     * Handler is invoked whenever room list is updated from server.
+     *
+     * @param handler Consumer that processes room list updates
+     */
     public void removeRoomListUpdateHandler(Consumer<List<GameRoom>> handler) {
         roomListUpdateHandlers.remove(handler);
 
     }
 
+    /**
+     * Sets callback for connection loss event.
+     *
+     * @param callback Runnable to execute when connection is lost
+     */
     public void setOnConnectionLost(Runnable callback) {
         this.onConnectionLost = callback;
     }
 
+    /**
+     * Sets callback for successful reconnection.
+     *
+     * @param callback Runnable to execute when reconnection succeeds
+     */
     public void setOnReconnectSuccess(Runnable callback) {
         this.onReconnectSuccess = callback;
     }
 
+
+    /**
+     * Sets callback for failed reconnection.
+     *
+     * @param callback Runnable to execute when reconnection fails
+     */
     public void setOnReconnectFailed(Runnable callback) {
         this.onReconnectFailed = callback;
     }
 
-    // ========== Геттери та Properties ==========
+    // ========== Getters and Properties ==========
 
+    /**
+     * Checks if currently connected to server.
+     *
+     * @return true if connected
+     */
     public boolean isConnected() {
         return connection.isConnected();
     }
 
+    /**
+     * Gets observable connection state property.
+     * Can be bound to UI components for automatic updates.
+     *
+     * @return BooleanProperty for connection state
+     */
     public BooleanProperty connectedProperty() {
         return connected;
     }
 
+    /**
+     * Gets observable status message property.
+     * Can be bound to UI labels for status display.
+     *
+     * @return StringProperty for status messages
+     */
     public StringProperty statusMessageProperty() {
         return statusMessage;
     }
 
+    /**
+     * Gets current client identifier.
+     *
+     * @return Client ID string
+     */
     public String getCurrentClientId() {
         return currentClientId;
     }
 
+    /**
+     * Gets current room name.
+     *
+     * @return Room name or null if not in a room
+     */
     public String getCurrentRoom() {
         return currentRoom;
     }
 
+    /**
+     * Gets copy of available rooms list.
+     *
+     * @return List of available game rooms
+     */
     public List<GameRoom> getAvailableRooms() {
         return new ArrayList<>(availableRooms);
     }
 
+    /**
+     * Gets the reconnection status dialog.
+     *
+     * @return ConnectionStatusDialog instance
+     */
     public ConnectionStatusDialog getReconnectDialog() {
         return reconnectDialog;
     }

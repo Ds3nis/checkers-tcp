@@ -19,6 +19,33 @@ import javafx.scene.layout.VBox;
 import java.net.URL;
 import java.util.*;
 
+/**
+ * Controller for the game lobby interface.
+ * Manages server connection, room listing, room creation/joining,
+ * and transitions to game view when a match starts.
+ *
+ * <p>Main responsibilities:
+ * <ul>
+ *   <li>Server connection management (connect/disconnect)</li>
+ *   <li>Room list display and updates</li>
+ *   <li>Room creation with validation</li>
+ *   <li>Room joining with status checks</li>
+ *   <li>Reconnection handling and UI feedback</li>
+ *   <li>Transition to game view when match starts</li>
+ * </ul>
+ *
+ * <p>Message flow:
+ * <ol>
+ *   <li>User connects → LOGIN → LOGIN_OK</li>
+ *   <li>Server sends ROOMS_LIST with available rooms</li>
+ *   <li>User creates/joins room → ROOM_CREATED/ROOM_JOINED</li>
+ *   <li>When 2 players ready → GAME_START → GAME_STATE</li>
+ *   <li>Transition to GameController with initial board state</li>
+ * </ol>
+ *
+ * <p>Thread safety: All UI updates are performed on JavaFX Application Thread
+ * using Platform.runLater() to ensure safe concurrent access from network threads.
+ */
 public class LobbyController implements Initializable {
 
     @FXML
@@ -53,6 +80,7 @@ public class LobbyController implements Initializable {
 
     private static final int MAX_ROOMS_DISPLAY = 50;
 
+    // Pending game state (waiting for GAME_STATE after GAME_START)
     private String pendingRoomName;
     private String pendingPlayer1;
     private String pendingPlayer2;
@@ -62,11 +90,22 @@ public class LobbyController implements Initializable {
 
     private ConnectionStatusDialog reconnectDialog;
 
+    /**
+     * Constructs LobbyController and gets ClientManager singleton instance.
+     */
     public LobbyController() {
         clientManager = ClientManager.getInstance();
     }
 
 
+    /**
+     * Initializes the controller after FXML loading.
+     * Sets up UI, binds connection state, registers message handlers,
+     * configures reconnection callbacks, and loads initial room list.
+     *
+     * @param location Location used to resolve relative paths (unused)
+     * @param resources Resources used to localize root object (unused)
+     */
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         setupUI();
@@ -85,6 +124,10 @@ public class LobbyController implements Initializable {
         loadInitialRooms();
     }
 
+    /**
+     * Initializes UI components and layout.
+     * Creates room list container, disables buttons, and sets initial button text.
+     */
     private void setupUI() {
         roomListBox = new VBox(10);
         roomListBox.setFillWidth(true);
@@ -97,7 +140,12 @@ public class LobbyController implements Initializable {
         updateConnectButtonText(false);
     }
 
+    /**
+     * Binds UI elements to ClientManager observable properties.
+     * Updates connection indicator, button states, and room list based on connection state.
+     */
     private void bindConnectionState() {
+        // Bind status message label
         clientManager.statusMessageProperty().addListener((obs, oldVal, newVal) -> {
             Platform.runLater(() -> {
                 netStateLbl.setText(newVal);
@@ -105,6 +153,7 @@ public class LobbyController implements Initializable {
             });
         });
 
+        // Bind connection state changes
         clientManager.connectedProperty().addListener((obs, oldVal, newVal) -> {
             Platform.runLater(() -> {
                 updateConnectButtonText(newVal);
@@ -123,6 +172,10 @@ public class LobbyController implements Initializable {
         });
     }
 
+    /**
+     * Restores UI state if already connected to server.
+     * Called during initialization to handle reconnection scenarios.
+     */
     private void restoreConnectionState() {
         if (clientManager.isConnected()) {
             System.out.println("Restoring connection state - already connected");
@@ -145,6 +198,11 @@ public class LobbyController implements Initializable {
         }
     }
 
+    /**
+     * Updates connect button text and styling based on connection state.
+     *
+     * @param isConnected true if connected to server
+     */
     private void updateConnectButtonText(boolean isConnected) {
         if (isConnected) {
             connectBtn.setText("Odpojit");
@@ -157,6 +215,10 @@ public class LobbyController implements Initializable {
         }
     }
 
+    /**
+     * Updates connection status indicator styling.
+     * Applies appropriate CSS class based on connection state.
+     */
     private void updateConnectionIndicator() {
         if (clientManager.isConnected()) {
             netStateLbl.getStyleClass().removeAll("status-disconnected", "status-error");
@@ -167,6 +229,10 @@ public class LobbyController implements Initializable {
         }
     }
 
+    /**
+     * Registers message handlers for all lobby-related protocol messages.
+     * Handlers process server responses and update UI accordingly.
+     */
     private void setupMessageHandlers() {
         clientManager.registerMessageHandler(OpCode.LOGIN_OK, this::handleLoginOk);
 
@@ -184,7 +250,12 @@ public class LobbyController implements Initializable {
         clientManager.addRoomListUpdateHandler(this::updateRoomList);
     }
 
+    /**
+     * Sets up callbacks for reconnection events.
+     * Configures dialog behavior and handles reconnection outcomes.
+     */
     private void setupReconnectCallbacks() {
+        // Connection lost callback
         clientManager.setOnConnectionLost(() -> {
             Platform.runLater(() -> {
                 System.out.println("Connection lost in lobby!");
@@ -192,6 +263,7 @@ public class LobbyController implements Initializable {
             });
         });
 
+        // Reconnection success callback
         clientManager.setOnReconnectSuccess(() -> {
             Platform.runLater(() -> {
                 System.out.println("Connection restored in lobby!");
@@ -199,6 +271,7 @@ public class LobbyController implements Initializable {
             });
         });
 
+        // Reconnection failure callback
         clientManager.setOnReconnectFailed(() -> {
             Platform.runLater(() -> {
                 System.err.println("Reconnect failed in lobby!");
@@ -211,17 +284,27 @@ public class LobbyController implements Initializable {
             });
         });
 
+        // Dialog cancel button callback
         reconnectDialog.setOnCancel(() -> {
             clientManager.disconnect();
         });
     }
 
+    /**
+     * Sets up button event handlers.
+     */
     private void setupButtonHandlers() {
         connectBtn.setOnAction(this::handleConnectDisconnect);
         createRoomBtn.setOnAction(this::handleCreateRoom);
         reloadBtn.setOnAction(this::handleReload);
     }
 
+    /**
+     * Handles connect/disconnect button click.
+     * Toggles between connect and disconnect based on current state.
+     *
+     * @param event Button action event
+     */
     private void handleConnectDisconnect(ActionEvent event) {
         if (clientManager.isConnected()) {
             handleDisconnect();
@@ -230,11 +313,16 @@ public class LobbyController implements Initializable {
         }
     }
 
+    /**
+     * Handles connection attempt to server.
+     * Validates input fields and initiates connection in background thread.
+     */
     private void handleConnect() {
         String host = ipField.getText().trim();
         String portStr = portField.getText().trim();
         String username = clientNameField.getText().trim();
 
+        // Validate input
         if (host.isEmpty()) {
             showError("Chyba", "Zadejte IP adresu serveru");
             return;
@@ -258,6 +346,7 @@ public class LobbyController implements Initializable {
 
         netStateLbl.setText("Připojování k ...");
 
+        // Connect in background thread to avoid blocking UI
         new Thread(() -> {
             boolean success = clientManager.connect(host, port, username);
             if (!success) {
@@ -271,6 +360,10 @@ public class LobbyController implements Initializable {
         }).start();
     }
 
+    /**
+     * Handles disconnection request from server.
+     * Shows confirmation dialog before disconnecting.
+     */
     private void handleDisconnect() {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Potvrzení");
@@ -285,12 +378,20 @@ public class LobbyController implements Initializable {
         }
     }
 
+
+    /**
+     * Handles room creation request.
+     * Shows dialog for room name input and validates before creating.
+     *
+     * @param event Button action event
+     */
     private void handleCreateRoom(ActionEvent event) {
         if (!clientManager.isConnected()) {
             showError("Chyba", "Nejprve se připojte k serveru");
             return;
         }
 
+        // Show room name input dialog
         TextInputDialog dialog = new TextInputDialog("Room_" + (new Random().nextInt(100)));
         dialog.setTitle("Vytvořit pokoj");
         dialog.setHeaderText("Vytvoření nové herny");
@@ -298,6 +399,7 @@ public class LobbyController implements Initializable {
 
         Optional<String> result = dialog.showAndWait();
         result.ifPresent(roomName -> {
+            // Validate room name
             if (roomName.trim().isEmpty()) {
                 showError("Chyba", "Název místnosti nemůže být prázdný");
                 return;
@@ -319,6 +421,13 @@ public class LobbyController implements Initializable {
     }
 
 
+
+    /**
+     * Handles room list reload request.
+     * Requests updated room list from server.
+     *
+     * @param event Button action event
+     */
     private void handleReload(ActionEvent event) {
         if (!clientManager.isConnected()) {
             showError("Chyba", "Nejprve se připojte k serveru");
@@ -329,6 +438,10 @@ public class LobbyController implements Initializable {
         requestRoomsList();
     }
 
+    /**
+     * Requests room list from server.
+     * Only sends request if connected.
+     */
     private void requestRoomsList() {
         if (!clientManager.isConnected()) {
             return;
@@ -338,7 +451,13 @@ public class LobbyController implements Initializable {
     }
 
 
+    // ========== Message Handlers ==========
 
+    /**
+     * Handles successful login confirmation from server.
+     *
+     * @param message LOGIN_OK message
+     */
     private void handleLoginOk(Message message) {
         Platform.runLater(() -> {
             showInfo("Úspěch", "Úspěšně připojeno k serveru!");
@@ -346,12 +465,25 @@ public class LobbyController implements Initializable {
 
     }
 
+    /**
+     * Handles login failure notification from server.
+     *
+     * @param message LOGIN_FAIL message with failure reason
+     */
     private void handleLoginFail(Message message) {
         Platform.runLater(() -> {
             showError("Chyba při přihlášení", "Nepodařilo se přihlásit: " + message.getData());
         });
     }
 
+    /**
+     * Handles room joined confirmation from server.
+     * Shows different messages based on whether waiting for opponent.
+     *
+     * Protocol format: "room_name,player_count"
+     *
+     * @param message ROOM_JOINED message
+     */
     private void handleRoomJoined(Message message) {
         Platform.runLater(() -> {
             String[] parts = message.getData().split(",");
@@ -372,24 +504,45 @@ public class LobbyController implements Initializable {
         });
     }
 
+    /**
+     * Handles room operation failure notification.
+     *
+     * @param message ROOM_FAIL message with failure reason
+     */
     private void handleRoomFail(Message message) {
         Platform.runLater(() -> {
             showError("Chyba místnosti", "Operace se nezdařila: " + message.getData());
         });
     }
 
+    /**
+     * Handles room full notification.
+     *
+     * @param message ROOM_FULL message
+     */
     private void handleRoomFull(Message message) {
         Platform.runLater(() -> {
             showError("Pokoj je plný", "Nelze se připojit – místnost je již plná");
         });
     }
 
+    /**
+     * Handles room list update from server.
+     * Actual list processing is done by updateRoomList callback.
+     *
+     * @param message ROOMS_LIST message with JSON data
+     */
     private void handleRoomsList(Message message) {
         Platform.runLater(() -> {
             System.out.println("Received rooms list from server");
         });
     }
 
+    /**
+     * Handles room creation confirmation.
+     *
+     * @param message ROOM_CREATED message
+     */
     private void handleRoomCreated(Message message) {
         Platform.runLater(() -> {
             showInfo("Pokoj vytvořen", "Místnost byla úspěšně vytvořena!");
@@ -397,6 +550,14 @@ public class LobbyController implements Initializable {
         });
     }
 
+    /**
+     * Handles game start notification from server.
+     * Stores game information and waits for GAME_STATE message with board.
+     *
+     * Protocol format: "room_name,player1,player2,first_turn"
+     *
+     * @param message GAME_START message
+     */
     private void handleGameStart(Message message) {
         Platform.runLater(() -> {
             try {
@@ -422,6 +583,12 @@ public class LobbyController implements Initializable {
         });
     }
 
+    /**
+     * Handles initial game state from server.
+     * Parses board state and opens game view if waiting for game start.
+     *
+     * @param message GAME_STATE message with JSON board data
+     */
     private void handleGameState(Message message) {
         Platform.runLater(() -> {
             try {
@@ -445,8 +612,11 @@ public class LobbyController implements Initializable {
         });
     }
 
-    // ========== Робота зі списком кімнат ==========
+    // ========== Room List Management ==========
 
+    /**
+     * Loads initial empty room list placeholder.
+     */
     private void loadInitialRooms() {
         roomListBox.setAlignment(Pos.CENTER);
         Label emptyLabel = new Label("Připojte se k serveru pro zobrazení mistnosti");
@@ -455,6 +625,15 @@ public class LobbyController implements Initializable {
     }
 
 
+
+    /**
+     * Updates room list display with new data from server.
+     * Loads FXML for each room item and adds to scrollable list.
+     *
+     * Thread-safe: Updates UI on JavaFX Application Thread.
+     *
+     * @param rooms List of available rooms to display
+     */
     private void updateRoomList(List<GameRoom> rooms) {
         Platform.runLater(() -> {
             clearRoomList();
@@ -466,12 +645,13 @@ public class LobbyController implements Initializable {
                 return;
             }
 
+            // Create room item for each room
             for (GameRoom gameRoom : rooms) {
                 try {
                     URL fxmlUrl = Main.class.getResource("roomitem-view.fxml");
                     FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(
                             fxmlUrl,
-                            "FXML 'roomitem-view.fxml' не знайдено"
+                            "FXML 'roomitem-view.fxml' not found"
                     ));
 
                     HBox roomCard = loader.load();
@@ -492,12 +672,21 @@ public class LobbyController implements Initializable {
         });
     }
 
-
+    /**
+     * Clears all rooms from the list display.
+     */
     private void clearRoomList() {
         roomListBox.getChildren().clear();
     }
 
 
+    /**
+     * Joins a game room.
+     * Called by RoomItemController when user clicks join button.
+     * Validates room status before sending join request.
+     *
+     * @param room Room to join
+     */
     public void joinRoom(GameRoom room) {
         if (!clientManager.isConnected()) {
             showError("Chyba", "Nejprve se připojte k serveru");
@@ -513,8 +702,14 @@ public class LobbyController implements Initializable {
         netStateLbl.setText("Připojování k pokoji...");
     }
 
-    // ========== Допоміжні методи ==========
+    // ========== Helper Methods ==========
 
+    /**
+     * Shows error dialog with title and message.
+     *
+     * @param title Dialog title
+     * @param message Error message
+     */
     private void showError(String title, String message) {
         new GameAlertDialog(
                 AlertVariant.ERROR,
@@ -526,6 +721,12 @@ public class LobbyController implements Initializable {
         ).show();
     }
 
+    /**
+     * Shows info dialog with title and message.
+     *
+     * @param title Dialog title
+     * @param message Info message
+     */
     private void showInfo(String title, String message) {
         new GameAlertDialog(
                 AlertVariant.INFO,
@@ -537,7 +738,11 @@ public class LobbyController implements Initializable {
         ).show();
     }
 
-
+    /**
+     * Cleans up resources when leaving lobby.
+     * Unregisters message handlers and callbacks.
+     * Should be called before transitioning to game view.
+     */
     public void cleanup() {
         clientManager.unregisterMessageHandler(OpCode.LOGIN_OK);
         clientManager.unregisterMessageHandler(OpCode.LOGIN_FAIL);
@@ -557,6 +762,17 @@ public class LobbyController implements Initializable {
         }
     }
 
+
+    /**
+     * Opens game view with initialized game state.
+     * Loads game FXML, configures game controller, and switches scenes.
+     *
+     * @param roomName Name of the game room
+     * @param player1 First player name (white pieces)
+     * @param player2 Second player name (black pieces)
+     * @param firstTurn Name of player who moves first
+     * @param initialBoardState Initial board state as 2D array
+     */
     private void openGameView(String roomName, String player1, String player2,
                               String firstTurn, int[][] initialBoardState) {
         try {
@@ -574,6 +790,7 @@ public class LobbyController implements Initializable {
 
             GameController gameController = loader.getController();
 
+            // Determine player color and opponent
             String myName = clientManager.getCurrentClientId();
             PieceColor myColor;
             String opponent;
@@ -593,14 +810,16 @@ public class LobbyController implements Initializable {
             System.out.println("Opponent: " + opponent);
             System.out.println("My turn: " + myTurn);
 
-
+            // Initialize game controller
             gameController.initGame(roomName, opponent, myColor, myTurn, initialBoardState);
 
+            // Switch to game scene
             javafx.stage.Stage stage = (javafx.stage.Stage) connectBtn.getScene().getWindow();
             stage.setFullScreen(true);
             stage.setScene(gameScene);
             stage.centerOnScreen();
 
+            // Clean up lobby resources
             cleanup();
 
             System.out.println("Successfully switched to game view");
@@ -611,6 +830,5 @@ public class LobbyController implements Initializable {
             showError("Chyba", "Nepodařilo se otevřít herní obrazovku: " + e.getMessage());
         }
     }
-
 
 }

@@ -9,6 +9,20 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
+/**
+ * Main client connection manager for the checkers game.
+ * Handles TCP connection, message sending/receiving, heartbeat monitoring,
+ * and automatic reconnection on connection loss.
+ *
+ * <p>Features:
+ * <ul>
+ *   <li>Asynchronous message handling with separate listener and sender threads</li>
+ *   <li>Automatic heartbeat monitoring with connection loss detection</li>
+ *   <li>Seamless reconnection with game state preservation</li>
+ *   <li>Protocol violation detection and spam protection</li>
+ *   <li>Thread-safe message queuing</li>
+ * </ul>
+ */
 public class ClientConnection {
     private Socket socket;
     private BufferedReader in;
@@ -25,16 +39,17 @@ public class ClientConnection {
     private int serverPort;
     private String clientId;
 
-    // Захист від спаму: лічильник однакових повідомлень
+    // Spam protection: track duplicate message counts
     private final ConcurrentHashMap<Integer, AtomicInteger> messageCounters = new ConcurrentHashMap<>();
-    private static final int MAX_DUPLICATE_MESSAGES = 10; // Максимум однакових повідомлень
-    private static final long COUNTER_RESET_INTERVAL = 5000; // Скидати лічильники кожні 5 секунд
+    private static final int MAX_DUPLICATE_MESSAGES = 10;  // Maximum identical messages allowed
+    private static final long COUNTER_RESET_INTERVAL = 5000; // Reset counters every 5 seconds
     private long lastCounterReset = System.currentTimeMillis();
 
     private HeartbeatManager heartbeatManager;
     private ReconnectManager reconnectManager;
     private boolean inReconnectMode = false;
 
+    // Protocol violation tracking
     private final AtomicInteger invalidMessageCount = new AtomicInteger(0);
     private static final int MAX_INVALID_MESSAGES = 1;
     private long lastInvalidMessageTime = 0;
@@ -42,15 +57,20 @@ public class ClientConnection {
 
     private ReconnectManager.ClientGameState currentGameState;
 
+    // Track active listener thread to prevent old threads from triggering disconnects
     private volatile long activeListenerThreadId = -1;
 
 
+    /**
+     * Constructs a new ClientConnection with heartbeat and reconnect managers.
+     * Initializes connection state handlers and sets up automatic reconnection.
+     */
     public ClientConnection() {
         heartbeatManager = new HeartbeatManager(this);
         reconnectManager = new ReconnectManager(this);
 
         currentGameState = ReconnectManager.ClientGameState.NOT_LOGGED_IN;
-
+        // Set up heartbeat callbacks
         heartbeatManager.setOnConnectionLost(() -> {
             System.err.println("Heartbeat detected connection loss");
             handleConnectionLoss();
@@ -61,6 +81,15 @@ public class ClientConnection {
         });
     }
 
+    /**
+     * Establishes connection to the game server.
+     * Creates socket, starts listener/sender threads, and initiates login sequence.
+     *
+     * @param host Server hostname or IP address
+     * @param port Server port number
+     * @param clientId Unique client identifier for this session
+     * @return true if connection successful, false otherwise
+     */
     public synchronized boolean connect(String host, int port, String clientId) {
         if (connected) {
             System.err.println("Already connected");
@@ -111,6 +140,10 @@ public class ClientConnection {
         }
     }
 
+    /**
+     * Gracefully disconnects from the server.
+     * Stops heartbeat monitoring, cleans up resources, and notifies handlers.
+     */
     public synchronized void disconnect() {
         if (!connected) {
             return;
@@ -118,17 +151,25 @@ public class ClientConnection {
 
         heartbeatManager.stop();
         reconnectManager.stopReconnect();
-
         connected = false;
-
         cleanupConnection();
 
         notifyConnectionState(false);
         System.out.println("Disconnected from server");
     }
 
+    /**
+     * Attempts to reconnect to the server at TCP level.
+     * Called by ReconnectManager during automatic reconnection attempts.
+     * Establishes new socket connection but waits for protocol-level verification.
+     *
+     * @param host Server hostname
+     * @param port Server port
+     * @param clientId Client identifier
+     * @return true if TCP connection established, false otherwise
+     */
     public synchronized boolean reconnect(String host, int port, String clientId) {
-        System.out.println("🔌 Attempting TCP reconnect to " + host + ":" + port);
+        System.out.println("Attempting TCP reconnect to " + host + ":" + port);
 
         cleanupConnection();
         inReconnectMode = true;
@@ -166,6 +207,10 @@ public class ClientConnection {
         }
     }
 
+    /**
+     * Forcefully closes the socket connection.
+     * Used during reconnection cleanup to ensure old socket is properly closed.
+     */
     public synchronized void forceCloseSocket() {
         try {
             if (socket != null && !socket.isClosed()) {
@@ -177,7 +222,10 @@ public class ClientConnection {
         }
     }
 
-
+    /**
+     * Handles connection loss detected by heartbeat monitor.
+     * Stops heartbeat, saves connection state, and initiates reconnection process.
+     */
     private void handleConnectionLoss() {
         if (!connected) {
             return;
@@ -205,6 +253,10 @@ public class ClientConnection {
         reconnectManager.startReconnect();
     }
 
+    /**
+     * Cleans up connection resources.
+     * Interrupts threads, closes streams and socket.
+     */
     private void cleanupConnection() {
         try {
             if (listenerThread != null) {
@@ -227,6 +279,10 @@ public class ClientConnection {
         }
     }
 
+    /**
+     * Transitions client to lobby state.
+     * Updates game state and clears room association.
+     */
     public void transitionToLobby() {
         currentGameState = ReconnectManager.ClientGameState.IN_LOBBY;
         reconnectManager.setGameState(currentGameState);
@@ -234,6 +290,12 @@ public class ClientConnection {
         System.out.println("State: IN_LOBBY");
     }
 
+    /**
+     * Transitions client to room waiting state.
+     * Called when player joins a room but game hasn't started yet.
+     *
+     * @param roomName Name of the room joined
+     */
     public void transitionToRoomWaiting(String roomName) {
         currentGameState = ReconnectManager.ClientGameState.IN_ROOM_WAITING;
         reconnectManager.setGameState(currentGameState);
@@ -241,6 +303,12 @@ public class ClientConnection {
         System.out.println("State: IN_ROOM_WAITING (room: " + roomName + ")");
     }
 
+    /**
+     * Transitions client to active game state.
+     * Called when game starts with both players present.
+     *
+     * @param roomName Name of the game room
+     */
     public void transitionToGame(String roomName) {
         currentGameState = ReconnectManager.ClientGameState.IN_GAME;
         reconnectManager.setGameState(currentGameState);
@@ -249,21 +317,28 @@ public class ClientConnection {
     }
 
 
-
+    /**
+     * Starts the message listener thread.
+     * Reads incoming messages from server, buffers partial messages,
+     * and processes complete messages when newline delimiter is received.
+     *
+     * <p>Thread safety: Only the active listener thread (tracked by ID)
+     * will trigger disconnection to prevent old threads from interfering
+     * with reconnection process.
+     */
     private void startListenerThread() {
-        // ========== ЗУПИНИТИ СТАРИЙ THREAD ==========
+        // Stop old listener thread if still running
         if (listenerThread != null && listenerThread.isAlive()) {
             System.out.println("Interrupting old listener thread...");
             listenerThread.interrupt();
             try {
-                listenerThread.join(1000); // Почекати максимум 1 секунду
+                listenerThread.join(1000); // Wait max 1 second
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
 
         listenerThread = new Thread(() -> {
-            // ========== ЗБЕРЕГТИ ID ЦЬОГО ПОТОКУ ==========
             long myThreadId = Thread.currentThread().getId();
             activeListenerThreadId = myThreadId;
 
@@ -274,11 +349,11 @@ public class ClientConnection {
 
             try {
                 while (connected) {
-                    // ========== ПЕРЕВІРИТИ ЧИ ЦЕЙ THREAD ЩЕ АКТИВНИЙ ==========
+                    // Store this thread's ID as the active listener
                     if (activeListenerThreadId != myThreadId) {
                         System.out.println("Listener thread " + myThreadId +
                                 " detected newer thread, exiting gracefully");
-                        return; // Вийти без disconnect
+                        return; // Exit without triggering disconnect
                     }
 
                     int charsRead = in.read(buffer, 0, buffer.length);
@@ -287,10 +362,11 @@ public class ClientConnection {
                         System.out.println("Server closed connection");
                         break;
                     }
-
+                    // Process received characters
                     for (int i = 0; i < charsRead; i++) {
                         char currentChar = buffer[i];
 
+                        // Prevent buffer overflow
                         if (messageBuffer.length() >= 8192) {
                             System.err.println("Message buffer overflow, resetting");
                             messageBuffer.setLength(0);
@@ -299,6 +375,7 @@ public class ClientConnection {
 
                         messageBuffer.append(currentChar);
 
+                        // Complete message received (newline delimiter)
                         if (currentChar == '\n') {
                             String messageStr = messageBuffer.toString().trim();
                             messageBuffer.setLength(0);
@@ -310,7 +387,7 @@ public class ClientConnection {
                     }
                 }
             } catch (SocketException e) {
-                // ========== ПЕРЕВІРИТИ ЧИ ПОТРІБНО ВИКЛИКАТИ DISCONNECT ==========
+                // Only active thread should trigger disconnect
                 if (activeListenerThreadId == myThreadId) {
                     if (connected && !inReconnectMode) {
                         System.err.println("Socket closed unexpectedly (thread " + myThreadId + ")");
@@ -319,7 +396,7 @@ public class ClientConnection {
                     }
                 } else {
                     System.out.println("Old socket closed (expected, thread " + myThreadId + ")");
-                    return; // Не викликати disconnect
+                    return; // Don't trigger disconnect
                 }
             } catch (IOException e) {
                 if (activeListenerThreadId == myThreadId) {
@@ -328,10 +405,10 @@ public class ClientConnection {
                     }
                 } else {
                     System.out.println("Old connection IOException (expected, thread " + myThreadId + ")");
-                    return; // Не викликати disconnect
+                    return; // Don't trigger disconnect
                 }
             } finally {
-                // ========== ТІЛЬКИ АКТИВНИЙ THREAD ВИКЛИКАЄ DISCONNECT ==========
+                // Only active thread triggers disconnect
                 if (activeListenerThreadId == myThreadId) {
                     if (connected && !inReconnectMode) {
                         System.out.println("Listener thread " + myThreadId + " ending, disconnecting...");
@@ -349,8 +426,12 @@ public class ClientConnection {
         listenerThread.start();
     }
 
-
-
+    /**
+     * Processes a received message string.
+     * Parses the message, checks for spam, and forwards to message handler.
+     *
+     * @param messageStr Raw message string to process
+     */
     private void processMessage(String messageStr) {
         try {
             Message message = Message.parse(messageStr);
@@ -376,6 +457,12 @@ public class ClientConnection {
         }
     }
 
+    /**
+     * Handles invalid message received from server.
+     * Tracks violation count and forcefully disconnects after threshold exceeded.
+     *
+     * @param reason Reason why message was invalid
+     */
     private void handleInvalidMessage(String reason) {
         long now = System.currentTimeMillis();
 
@@ -394,6 +481,12 @@ public class ClientConnection {
         }
     }
 
+    /**
+     * Forces immediate disconnection due to protocol violation.
+     * Sends error message to server and disconnects.
+     *
+     * @param reason Reason for forced disconnect
+     */
     private synchronized void forceDisconnect(String reason) {
         System.err.println("FORCE DISCONNECT: " + reason);
 
@@ -408,8 +501,17 @@ public class ClientConnection {
         notifyConnectionState(false);
     }
 
+    /**
+     * Checks for message spam (duplicate messages in short time period).
+     * Implements sliding window spam detection with automatic counter reset.
+     *
+     * @param message Message to check
+     * @return true if message is not spam, false if spam detected
+     */
     private boolean checkMessageSpam(Message message) {
         long now = System.currentTimeMillis();
+
+        // Reset counters periodically
         if (now - lastCounterReset > COUNTER_RESET_INTERVAL) {
             messageCounters.clear();
             lastCounterReset = now;
@@ -427,7 +529,7 @@ public class ClientConnection {
 
         if (count > MAX_DUPLICATE_MESSAGES) {
             if (count == MAX_DUPLICATE_MESSAGES + 1) {
-                System.err.println("⚠️ Spam detected: " + message.getOpCode() +
+                System.err.println("Spam detected: " + message.getOpCode() +
                         " received " + count + " times in " +
                         COUNTER_RESET_INTERVAL + "ms");
             }
@@ -437,6 +539,12 @@ public class ClientConnection {
         return true;
     }
 
+
+    /**
+     * Starts the message sender thread.
+     * Processes messages from queue and sends them to server.
+     * Uses blocking queue for thread-safe message queuing.
+     */
     private void startSenderThread() {
         if (senderThread != null && senderThread.isAlive()) {
             System.out.println("Interrupting old sender thread...");
@@ -469,6 +577,12 @@ public class ClientConnection {
         senderThread.start();
     }
 
+    /**
+     * Queues a message for sending to the server.
+     * Messages are sent asynchronously by the sender thread.
+     *
+     * @param message Message to send
+     */
     private void sendMessage(Message message) {
         if (!connected) {
             System.err.println("Not connected to server");
@@ -483,25 +597,52 @@ public class ClientConnection {
         }
     }
 
-    // ========== API methods for interaction with server ==========
+    // ========== Protocol message methods ==========
 
+    /**
+     * Sends login request with client identifier.
+     *
+     * @param clientId Unique client identifier
+     */
     public void sendLogin(String clientId) {
         Message msg = new Message(OpCode.LOGIN, clientId);
         sendMessage(msg);
     }
 
+    /**
+     * Sends request to create a new game room.
+     *
+     * @param playerName Name of the player creating the room
+     * @param roomName Name for the new room
+     */
     public void sendCreateRoom(String playerName, String roomName) {
         String data = playerName + "," + roomName;
         Message msg = new Message(OpCode.CREATE_ROOM, data);
         sendMessage(msg);
     }
 
+    /**
+     * Sends request to join an existing room.
+     *
+     * @param playerName Name of the player joining
+     * @param roomName Name of the room to join
+     */
     public void sendJoinRoom(String playerName, String roomName) {
         String data = playerName + "," + roomName;
         Message msg = new Message(OpCode.JOIN_ROOM, data);
         sendMessage(msg);
     }
 
+    /**
+     * Sends a single move in the checkers game.
+     *
+     * @param roomName Current game room
+     * @param playerName Player making the move
+     * @param fromRow Source row coordinate
+     * @param fromCol Source column coordinate
+     * @param toRow Destination row coordinate
+     * @param toCol Destination column coordinate
+     */
     public void sendMove(String roomName, String playerName, int fromRow, int fromCol, int toRow, int toCol) {
         String data = String.format("%s,%s,%d,%d,%d,%d",
                 roomName, playerName, fromRow, fromCol, toRow, toCol);
@@ -509,32 +650,60 @@ public class ClientConnection {
         sendMessage(msg);
     }
 
+    /**
+     * Sends request to leave current room.
+     *
+     * @param roomName Room to leave
+     * @param playerName Player leaving
+     */
     public void sendLeaveRoom(String roomName, String playerName) {
         String data = roomName + "," + playerName;
         Message msg = new Message(OpCode.LEAVE_ROOM, data);
         sendMessage(msg);
     }
 
+    /**
+     * Sends PING to server for connection monitoring.
+     */
     public void sendPing() {
         Message msg = new Message(OpCode.PING, "");
         sendMessage(msg);
     }
 
+    /**
+     * Sends PONG response to server's PING.
+     */
     public void sendPong(){
         Message msg = new Message(OpCode.PONG, "");
         sendMessage(msg);
     }
 
+    /**
+     * Requests list of available rooms from server.
+     */
     public void sendListRooms() {
         Message msg = new Message(OpCode.LIST_ROOMS, "");
         sendMessage(msg);
     }
 
+    /**
+     * Sends error message to server.
+     *
+     * @param error Error description
+     */
     public void sendError(String error){
         Message msg = new Message(OpCode.ERROR, error);
         sendMessage(msg);
     }
 
+    /**
+     * Sends multi-jump move sequence.
+     * Used when player captures multiple pieces in one turn.
+     *
+     * @param roomName Current game room
+     * @param playerName Player making the moves
+     * @param path List of positions in the jump sequence
+     */
     public void sendMultiMove(String roomName, String playerName, List<Position> path) {
         StringBuilder data = new StringBuilder();
         data.append(roomName).append(",");
@@ -549,6 +718,13 @@ public class ClientConnection {
         sendMessage(msg);
     }
 
+    /**
+     * Sends reconnection request to server.
+     * Used to restore session after connection loss.
+     *
+     * @param roomName Room to reconnect to (null for lobby)
+     * @param playerName Player identifier
+     */
     public void sendReconnectRequest(String roomName, String playerName) {
         String data;
 
@@ -564,56 +740,127 @@ public class ClientConnection {
         sendMessage(msg);
     }
 
+
+    // ========== Public API and getters ==========
+
+    /**
+     * Notifies connection state handler (public wrapper for external access).
+     *
+     * @param state Connection state (true = connected, false = disconnected)
+     */
     public void notifyConnectionStatePublic(boolean state) {
         notifyConnectionState(state);
     }
 
+    /**
+     * Checks if client is in reconnection mode.
+     *
+     * @return true if reconnecting
+     */
     public boolean isInReconnectMode() {
         return inReconnectMode;
     }
 
+    /**
+     * Gets the heartbeat manager instance.
+     *
+     * @return HeartbeatManager
+     */
     public HeartbeatManager getHeartbeatManager() {
         return heartbeatManager;
     }
 
+    /**
+     * Gets the current room name.
+     *
+     * @return Room name or null if not in a room
+     */
     private String getCurrentRoom() {
         return reconnectManager.getCurrentRoom();
     }
 
+    /**
+     * Gets the reconnect manager instance.
+     *
+     * @return ReconnectManager
+     */
     public ReconnectManager getReconnectManager() {
         return reconnectManager;
     }
 
+    /**
+     * Gets the current game state.
+     *
+     * @return Current ClientGameState
+     */
     public ReconnectManager.ClientGameState getCurrentGameState() {
         return currentGameState;
     }
 
+
+    /**
+     * Checks if connection is active.
+     *
+     * @return true if connected and socket is open
+     */
     public boolean isConnected() {
         return connected && socket != null && !socket.isClosed();
     }
 
+    /**
+     * Gets the client identifier.
+     *
+     * @return Client ID string
+     */
     public String getClientId() {
         return clientId;
     }
 
+    /**
+     * Sets the message handler callback.
+     * Called when a complete message is received and parsed.
+     *
+     * @param handler Consumer that processes incoming messages
+     */
     public void setMessageHandler(Consumer<Message> handler) {
         this.messageHandler = handler;
     }
 
+    /**
+     * Sets the connection state handler callback.
+     * Called when connection state changes (connected/disconnected).
+     *
+     * @param handler Consumer that processes connection state changes
+     */
     public void setConnectionStateHandler(Consumer<Boolean> handler) {
         this.connectionStateHandler = handler;
     }
 
+    /**
+     * Sets the reconnection mode flag.
+     *
+     * @param mode true to enable reconnect mode
+     */
     public void setInReconnectMode(boolean mode) {
         this.inReconnectMode = mode;
     }
 
+    /**
+     * Notifies connection state handler of state change.
+     *
+     * @param state Connection state (true = connected, false = disconnected)
+     */
     private void notifyConnectionState(boolean state) {
         if (connectionStateHandler != null) {
             connectionStateHandler.accept(state);
         }
     }
 
+    /**
+     * Gets server connection information as string.
+     *
+     * @return "host:port" if connected, "Not connected" otherwise
+     */
     public String getServerInfo() {
         if (connected) {
             return serverHost + ":" + serverPort;
@@ -621,6 +868,11 @@ public class ClientConnection {
         return "Not connected";
     }
 
+    /**
+     * Gets message statistics for debugging.
+     *
+     * @return Formatted string with message counts per operation
+     */
     public String getMessageStats() {
         StringBuilder stats = new StringBuilder("Message statistics:\n");
         messageCounters.forEach((key, counter) -> {

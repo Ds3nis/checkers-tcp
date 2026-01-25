@@ -15,25 +15,58 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * JavaFX component representing the visual and logical checkers board.
+ *
+ * This class is responsible for:
+ * - Rendering the board grid and pieces
+ * - Handling user interaction (clicks, selection, moves)
+ * - Calculating and highlighting valid moves
+ * - Animating piece movement and captures
+ * - Managing turn state and board resizing
+ *
+ * It acts as the main bridge between UI, game logic, and (optionally) server callbacks.
+ */
 public class CheckersBoard extends GridPane {
+    // Board size (standard 8x8 checkers board)
     private static final int SIZE = 8;
 
+    // Current size of each cell in pixels, calculated dynamically based on window size
     private double cellSize;
+
+    // 2D array storing piece objects at their board positions
     private Piece[][] pieces = new Piece[SIZE][SIZE];
+
+    // 2D array storing the StackPane cells that make up the visual board
     private StackPane[][] cells = new StackPane[SIZE][SIZE];
 
-
+    // Currently selected piece that the user has clicked on
     private Piece selectedPiece = null;
+
+    // List of valid moves available for the currently selected piece
     private List<Move> validMoves = new ArrayList<>();
+
+    // Current player's turn (WHITE or BLACK)
     private PieceColor currentTurn = PieceColor.WHITE;
 
+    // Callback function invoked when a move is attempted (typically sends move to server)
     private MoveCallback onMoveAttempt;
+
+    // Callback function invoked when a piece is selected
     private SelectionCallback onPieceSelected;
+
+    // Flag indicating whether an animation is currently playing
     private boolean animating = false;
+
+    // Callback to run after move animation completes
     private Runnable onAnimationFinished;
+
+    // The color assigned to this client (WHITE or BLACK)
     private PieceColor myColor;
 
-
+    /**
+     * Constructor initializes the board structure and sets up responsive resizing.
+     */
     public CheckersBoard() {
         setHgap(0);
         setVgap(0);
@@ -41,12 +74,14 @@ public class CheckersBoard extends GridPane {
         buildBoard();
         initializePieces();
 
+        // Listen for window size changes and resize board accordingly
         widthProperty().addListener((obs, oldVal, newVal) -> resizeBoard());
         heightProperty().addListener((obs, oldVal, newVal) -> resizeBoard());
     }
 
     /**
-     * Створення дошки
+     * Creates the visual board grid of 8x8 cells.
+     * Each cell is a StackPane that can contain pieces and highlights.
      */
     private void buildBoard() {
         getChildren().clear();
@@ -60,27 +95,36 @@ public class CheckersBoard extends GridPane {
         }
     }
 
+    /**
+     * Sets the callback to be invoked when move animation finishes.
+     *
+     * @param r Runnable to execute after animation completes
+     */
     public void setOnAnimationFinished(Runnable r) {
         this.onAnimationFinished = r;
     }
 
     /**
-     * Створення окремої клітинки
+     * Creates a single cell on the checkers board with appropriate styling and event handlers.
+     *
+     * @param row Row position of the cell
+     * @param col Column position of the cell
+     * @return StackPane representing the cell
      */
     private StackPane createCell(int row, int col) {
         StackPane cell = new StackPane();
 
-        // Стилі для світлих/темних клітинок
+        // Apply different styles for light and dark squares
         boolean isDark = (row + col) % 2 != 0;
         cell.getStyleClass().add(isDark ? "cell-dark" : "cell-light");
 
-        // Обробка кліків
+        // Handle cell clicks for move execution
         final int finalRow = row;
         final int finalCol = col;
 
         cell.setOnMouseClicked(e -> handleCellClick(finalRow, finalCol));
 
-        // Hover ефект тільки для темних клітинок
+        // Add hover effect only for dark cells (playable squares)
         if (isDark) {
             cell.setOnMouseEntered(e -> {
                 if (selectedPiece != null && isValidMoveTarget(finalRow, finalCol)) {
@@ -97,7 +141,10 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Підсвітка клітинки
+     * Highlights or removes highlight from a cell.
+     *
+     * @param cell The cell to highlight
+     * @param highlight True to add highlight, false to remove it
      */
     private void highlightCell(StackPane cell, boolean highlight) {
         if (highlight) {
@@ -108,10 +155,12 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Ініціалізація шашок на початкових позиціях
+     * Initializes all pieces in their starting positions.
+     * Black pieces occupy the top 3 rows, white pieces occupy the bottom 3 rows.
+     * Pieces are only placed on dark squares.
      */
     private void initializePieces() {
-        // Чорні шашки (верх дошки)
+        // Black pieces (top of the board)
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < SIZE; col++) {
                 if ((row + col) % 2 != 0) {
@@ -120,7 +169,7 @@ public class CheckersBoard extends GridPane {
             }
         }
 
-        // Білі шашки (низ дошки)
+        // White pieces (bottom of the board)
         for (int row = SIZE - 3; row < SIZE; row++) {
             for (int col = 0; col < SIZE; col++) {
                 if ((row + col) % 2 != 0) {
@@ -129,12 +178,17 @@ public class CheckersBoard extends GridPane {
             }
         }
 
-        // Оновлюємо розміри після створення
+        // Update sizes after creation
         resizeBoard();
     }
 
     /**
-     * Додати шашку на дошку
+     * Adds a piece to the board at the specified position.
+     * Sets up event handlers for clicking and hovering over the piece.
+     *
+     * @param type Type of piece to add (BLACK_PIECE, WHITE_PIECE, etc.)
+     * @param row Row position
+     * @param col Column position
      */
     private void addPiece(PieceType type, int row, int col) {
         if (type == PieceType.EMPTY) return;
@@ -146,13 +200,13 @@ public class CheckersBoard extends GridPane {
         StackPane cell = cells[row][col];
         cell.getChildren().add(piece);
 
-        // Обробка кліків на шашку
+        // Handle clicks on the piece
         piece.setOnMouseClicked(e -> {
             e.consume();
             handlePieceClick(piece);
         });
 
-        // Hover ефект
+        // Hover effect to indicate selectable pieces
         piece.setOnMouseEntered(e -> {
             if (canSelectPiece(piece)) {
                 piece.setHovered(true);
@@ -163,10 +217,14 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Обробка кліку на клітинку
+     * Handles clicks on empty cells.
+     * If a piece is selected, attempts to move it to the clicked cell.
+     *
+     * @param row Row of the clicked cell
+     * @param col Column of the clicked cell
      */
     private void handleCellClick(int row, int col) {
-        // Якщо є вибрана шашка - спроба ходу
+        // If there's a selected piece, try to move it
         if (selectedPiece != null) {
             Move move = findMove(selectedPiece.getRow(), selectedPiece.getCol(), row, col);
             if (move != null) {
@@ -178,37 +236,46 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Обробка кліку на шашку
+     * Handles clicks on pieces.
+     * Selects the piece if it's the player's turn and color, or deselects if already selected.
+     *
+     * @param piece The piece that was clicked
      */
     private void handlePieceClick(Piece piece) {
-        // Якщо ця шашка вже вибрана - зняти виділення
+        // If this piece is already selected, deselect it
         if (piece == selectedPiece) {
             deselectPiece();
             return;
         }
 
-        // Якщо можна вибрати цю шашку
+        // If this piece can be selected, select it
         if (canSelectPiece(piece)) {
             selectPiece(piece);
         }
-        // Якщо є вибрана шашка і клікнули на іншу - спроба з'їсти
+        // If another piece is selected, deselect it
         else if (selectedPiece != null) {
             deselectPiece();
         }
     }
 
     /**
-     * Чи можна вибрати цю шашку
+     * Checks if a piece can be selected by the current player.
+     * A piece can be selected if it matches both the current turn and the player's color.
+     *
+     * @param piece The piece to check
+     * @return True if the piece can be selected
      */
     private boolean canSelectPiece(Piece piece) {
         return piece != null && (piece.getColor() == currentTurn && piece.getColor() == myColor);
     }
 
     /**
-     * Вибрати шашку
+     * Selects a piece and highlights all its valid moves.
+     *
+     * @param piece The piece to select
      */
     private void selectPiece(Piece piece) {
-        // Зняти попереднє виділення
+        // Deselect previous piece if any
         if (selectedPiece != null) {
             selectedPiece.setSelected(false);
             clearHighlights();
@@ -217,20 +284,20 @@ public class CheckersBoard extends GridPane {
         selectedPiece = piece;
         piece.setSelected(true);
 
-        // Знайти валідні ходи для цієї шашки
+        // Find all valid moves for this piece
         validMoves = getValidMovesForPiece(piece);
 
-        // Підсвітити можливі ходи
+        // Highlight possible moves on the board
         highlightValidMoves();
 
-        // Callback
+        // Invoke callback if set
         if (onPieceSelected != null) {
             onPieceSelected.onPieceSelected(piece);
         }
     }
 
     /**
-     * Зняти виділення з шашки
+     * Deselects the currently selected piece and clears move highlights.
      */
     private void deselectPiece() {
         if (selectedPiece != null) {
@@ -242,27 +309,28 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Підсвітити валідні ходи
+     * Highlights all valid move destinations for the currently selected piece.
+     * Capture moves are shown in red, regular moves in green.
      */
     private void highlightValidMoves() {
         for (Move move : validMoves) {
             StackPane targetCell = cells[move.getToRow()][move.getToCol()];
 
-            // Додаємо візуальний індикатор можливого ходу
+            // Add visual indicator for possible moves
             Rectangle highlight = new Rectangle();
             highlight.setFill(move.isCapture() ?
-                    Color.rgb(255, 0, 0, 0.3) :  // Червоний для захоплення
-                    Color.rgb(0, 255, 0, 0.3));   // Зелений для звичайного ходу
+                    Color.rgb(255, 0, 0, 0.3) :  // Red for captures
+                    Color.rgb(0, 255, 0, 0.3));   // Green for regular moves
             highlight.widthProperty().bind(targetCell.widthProperty());
             highlight.heightProperty().bind(targetCell.heightProperty());
             highlight.getStyleClass().add("move-highlight");
 
-            targetCell.getChildren().add(0, highlight); // Додати під шашку
+            targetCell.getChildren().add(0, highlight); // Add behind pieces
         }
     }
 
     /**
-     * Очистити підсвітку
+     * Removes all move highlight rectangles from the board.
      */
     private void clearHighlights() {
         for (int row = 0; row < SIZE; row++) {
@@ -275,7 +343,13 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Знайти хід в списку валідних ходів
+     * Finds a move in the list of valid moves matching the given coordinates.
+     *
+     * @param fromRow Starting row
+     * @param fromCol Starting column
+     * @param toRow Destination row
+     * @param toCol Destination column
+     * @return The matching Move object, or null if not found
      */
     private Move findMove(int fromRow, int fromCol, int toRow, int toCol) {
         for (Move move : validMoves) {
@@ -288,7 +362,11 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Чи є клітинка валідною ціллю для ходу
+     * Checks if a cell is a valid move destination for the selected piece.
+     *
+     * @param row Row to check
+     * @param col Column to check
+     * @return True if the cell is a valid move target
      */
     private boolean isValidMoveTarget(int row, int col) {
         for (Move move : validMoves) {
@@ -300,20 +378,26 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Спроба виконати хід
+     * Attempts to execute a move by invoking the move callback.
+     * If no callback is set, executes the move locally (for testing).
+     *
+     * @param move The move to attempt
      */
     private void attemptMove(Move move) {
         if (onMoveAttempt != null) {
-            // Callback для обробки ходу (відправка на сервер)
+            // Callback for handling the move (typically sends to server)
             onMoveAttempt.onMove(move);
         } else {
-            // Локальне виконання ходу (для тестування)
+            // Local execution for testing
             executeMove(move);
         }
     }
 
     /**
-     * Виконати хід на дошці (з анімацією)
+     * Executes a move on the board with animation.
+     * Removes captured pieces, promotes to king if applicable, and switches turns.
+     *
+     * @param move The move to execute
      */
     public void executeMove(Move move) {
         if (animating) return;
@@ -326,14 +410,14 @@ public class CheckersBoard extends GridPane {
         }
 
         animateMove(move, () -> {
-            // Видалити всі з'їдені шашки
+            // Remove all captured pieces
             if (move.isCapture()) {
                 for (Position captured : move.getCapturedPositions()) {
                     removePiece(captured.getRow(), captured.getCol());
                 }
             }
 
-            // Промоція в дамку
+            // Promote to king if move reaches the opposite end
             if (move.promotesToKing()) {
                 piece.promoteToKing();
             }
@@ -348,9 +432,11 @@ public class CheckersBoard extends GridPane {
         });
     }
 
-
     /**
-     * Анімація ходу
+     * Animates a piece moving from one position to another.
+     *
+     * @param move The move to animate
+     * @param onComplete Callback to run when animation finishes
      */
     private void animateMove(Move move, Runnable onComplete) {
         Piece piece = pieces[move.getFromRow()][move.getFromCol()];
@@ -359,6 +445,7 @@ public class CheckersBoard extends GridPane {
         StackPane fromCell = cells[move.getFromRow()][move.getFromCol()];
         StackPane toCell = cells[move.getToRow()][move.getToCol()];
 
+        // Calculate pixel distance to move
         double dx = (move.getToCol() - move.getFromCol()) * cellSize;
         double dy = (move.getToRow() - move.getFromRow()) * cellSize;
 
@@ -367,12 +454,12 @@ public class CheckersBoard extends GridPane {
         translate.setByY(dy);
 
         translate.setOnFinished(e -> {
-            // Переміщення в моделі
+            // Update model
             pieces[move.getFromRow()][move.getFromCol()] = null;
             pieces[move.getToRow()][move.getToCol()] = piece;
             piece.setPosition(move.getToRow(), move.getToCol());
 
-            // Переміщення в UI
+            // Update UI - move piece to new cell
             fromCell.getChildren().remove(piece);
             piece.setTranslateX(0);
             piece.setTranslateY(0);
@@ -387,14 +474,17 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Видалити шашку з дошки
+     * Removes a piece from the board with a fade-out animation.
+     *
+     * @param row Row of the piece to remove
+     * @param col Column of the piece to remove
      */
     private void removePiece(int row, int col) {
         Piece piece = pieces[row][col];
         if (piece != null) {
             StackPane cell = cells[row][col];
 
-            // Анімація зникнення
+            // Fade out animation
             FadeTransition fade = new FadeTransition(Duration.millis(300), piece);
             fade.setToValue(0);
             fade.setOnFinished(e -> cell.getChildren().remove(piece));
@@ -404,6 +494,13 @@ public class CheckersBoard extends GridPane {
         }
     }
 
+    /**
+     * Calculates all valid moves for a given piece.
+     * If capture moves are available, only capture moves are returned (mandatory capture rule).
+     *
+     * @param piece The piece to calculate moves for
+     * @return List of valid moves
+     */
     private List<Move> getValidMovesForPiece(Piece piece) {
         List<Move> moves = new ArrayList<>();
         int row = piece.getRow();
@@ -414,7 +511,8 @@ public class CheckersBoard extends GridPane {
         } else {
             addRegularPieceMoves(piece, row, col, moves);
         }
-        // Якщо є можливість биття - залишити тільки биття (обов'язкове биття)
+
+        // If captures are possible, return only captures (mandatory capture rule)
         List<Move> captureMoves = moves.stream()
                 .filter(Move::isCapture)
                 .collect(Collectors.toList());
@@ -426,12 +524,20 @@ public class CheckersBoard extends GridPane {
         return moves;
     }
 
-
+    /**
+     * Adds all possible moves for a regular (non-king) piece.
+     * Regular pieces can move forward diagonally and must capture when possible.
+     *
+     * @param piece The piece to calculate moves for
+     * @param row Current row
+     * @param col Current column
+     * @param moves List to add moves to
+     */
     private void addRegularPieceMoves(Piece piece, int row, int col, List<Move> moves) {
-        int direction = -1; // Завжди вгору після ротації
+        int direction = -1; // Always upward after rotation
 
         for (int dCol : new int[]{-1, 1}) {
-            // Звичайний хід
+            // Regular move (one square diagonally forward)
             int newRow = row + direction;
             int newCol = col + dCol;
 
@@ -439,165 +545,31 @@ public class CheckersBoard extends GridPane {
                 boolean promotesToKing = checkPromotion(piece, newRow);
                 moves.add(new Move(row, col, newRow, newCol, MoveType.NORMAL, promotesToKing));
             }
-
-            // Перевірка множинного биття
         }
 
+        // Explore all possible multi-jump capture sequences
         List<Position> emptyPath = new ArrayList<>();
         emptyPath.add(new Position(row, col));
-        exploreCaptures(piece, row, col, new boolean[SIZE][SIZE], new ArrayList<>(),emptyPath, moves);
+        exploreCaptures(piece, row, col, new boolean[SIZE][SIZE], new ArrayList<>(), emptyPath, moves);
     }
 
     /**
-     * Рекурсивний пошук множинного биття
+     * Recursively explores all possible capture sequences for a piece.
+     * This handles multi-jump captures where a piece can capture multiple opponents in one turn.
+     *
+     * @param piece The piece making captures
+     * @param row Current row position in the sequence
+     * @param col Current column position in the sequence
+     * @param visited Array tracking visited positions to prevent cycles
+     * @param capturedSoFar List of pieces captured in this sequence
+     * @param pathSoFar Path of positions visited in this capture sequence
+     * @param allMoves List to add complete capture moves to
      */
-
-
-    /**
-     * Перевірка чи позиція вже з'їдена в поточному ланцюжку
-     */
-    private boolean isCaptured(int row, int col, List<Position> captured) {
-        for (Position pos : captured) {
-            if (pos.getRow() == row && pos.getCol() == col) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void addKingMoves(Piece piece, int row, int col, List<Move> moves) {
-        // Дамка може ходити в 4 напрямки
-        int[][] directions = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
-
-        for (int[] dir : directions) {
-            int dRow = dir[0];
-            int dCol = dir[1];
-
-            // Звичайні ходи (до першої перешкоди)
-            for (int distance = 1; distance < SIZE; distance++) {
-                int newRow = row + dRow * distance;
-                int newCol = col + dCol * distance;
-
-                if (!isValidPosition(newRow, newCol)) break;
-
-                if (pieces[newRow][newCol] == null) {
-                    // Порожня клітинка - можна піти
-                    moves.add(new Move(row, col, newRow, newCol, MoveType.NORMAL, false));
-                } else {
-                    // Зустріли шашку - перевірити чи можна з'їсти
-                    if (pieces[newRow][newCol].getColor() != piece.getColor()) {
-                        // Це супротивник - перевірити чи є місце за ним
-                        addKingCaptureMove(piece, row, col, newRow, newCol, dRow, dCol, moves);
-                    }
-                    break; // Зупинитися на першій шашці
-                }
-            }
-        }
-
-        // ✅ ВИПРАВЛЕНО: Додати початковий шлях для дамки
-        List<Position> initialPath = new ArrayList<>();
-        initialPath.add(new Position(row, col));
-
-        exploreKingCaptures(piece, row, col, new boolean[SIZE][SIZE], new ArrayList<>(), initialPath, moves);
-    }
-
-
-    private void exploreKingCaptures(Piece piece, int row, int col,
-                                     boolean[][] visited, List<Position> capturedSoFar,
-                                     List<Position> pathSoFar, List<Move> allMoves) {
-        boolean foundCapture = false;
-        int[][] directions = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
-
-        for (int[] dir : directions) {
-            int dRow = dir[0];
-            int dCol = dir[1];
-
-            for (int distance = 1; distance < SIZE; distance++) {
-                int enemyRow = row + dRow * distance;
-                int enemyCol = col + dCol * distance;
-
-                if (!isValidPosition(enemyRow, enemyCol)) break;
-
-                if (pieces[enemyRow][enemyCol] != null) {
-                    if (pieces[enemyRow][enemyCol].getColor() != piece.getColor() &&
-                            !isCaptured(enemyRow, enemyCol, capturedSoFar)) {
-
-                        for (int landDistance = 1; landDistance < SIZE; landDistance++) {
-                            int landRow = enemyRow + dRow * landDistance;
-                            int landCol = enemyCol + dCol * landDistance;
-
-                            if (!isValidPosition(landRow, landCol)) break;
-
-                            if (pieces[landRow][landCol] == null && !visited[landRow][landCol]) {
-                                foundCapture = true;
-                                visited[landRow][landCol] = true;
-
-                                List<Position> newCaptured = new ArrayList<>(capturedSoFar);
-                                newCaptured.add(new Position(enemyRow, enemyCol));
-
-                                List<Position> newPath = new ArrayList<>(pathSoFar);
-                                newPath.add(new Position(landRow, landCol));
-
-                                exploreKingCaptures(piece, landRow, landCol, visited, newCaptured, newPath, allMoves);
-
-                                visited[landRow][landCol] = false;
-                            } else if (pieces[landRow][landCol] != null) {
-                                break;
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-
-        if (!foundCapture && !capturedSoFar.isEmpty()) {
-            MoveType type = capturedSoFar.size() > 1 ? MoveType.MULTI_CAPTURE : MoveType.CAPTURE;
-            Move move = new Move(piece.getRow(), piece.getCol(), row, col, type, false);
-
-            for (Position pos : capturedSoFar) {
-                move.addCapturedPosition(pos.getRow(), pos.getCol());
-            }
-
-            for (Position pathPos : pathSoFar) {
-                move.addPathPosition(pathPos.getRow(), pathPos.getCol());
-            }
-
-            allMoves.add(move);
-
-            System.out.println("Created king capture move:");
-            System.out.println("   Path: " + pathSoFar.size() + " positions");
-        }
-    }
-
-    /**
-     * Додати хід з битням для дамки
-     */
-    private void addKingCaptureMove(Piece piece, int fromRow, int fromCol,
-                                    int enemyRow, int enemyCol, int dRow, int dCol,
-                                    List<Move> moves) {
-        // Знайти всі можливі позиції за супротивником
-        for (int distance = 1; distance < SIZE; distance++) {
-            int landRow = enemyRow + dRow * distance;
-            int landCol = enemyCol + dCol * distance;
-
-            if (!isValidPosition(landRow, landCol)) break;
-
-            if (pieces[landRow][landCol] == null) {
-                Move move = new Move(fromRow, fromCol, landRow, landCol, MoveType.CAPTURE, false);
-                move.addCapturedPosition(enemyRow, enemyCol);
-                moves.add(move);
-            } else {
-                break; // Зустріли іншу шашку
-            }
-        }
-    }
-
     private void exploreCaptures(Piece piece, int row, int col, boolean[][] visited,
                                  List<Position> capturedSoFar, List<Position> pathSoFar,
                                  List<Move> allMoves) {
         boolean foundFurtherCapture = false;
-        int[] rowDirs = piece.isKing() ? new int[]{-1, 1} : new int[]{-1,1};
+        int[] rowDirs = piece.isKing() ? new int[]{-1, 1} : new int[]{-1, 1};
 
         for (int dRow : rowDirs) {
             for (int dCol : new int[]{-1, 1}) {
@@ -606,6 +578,8 @@ public class CheckersBoard extends GridPane {
                 int midRow = row + dRow;
                 int midCol = col + dCol;
 
+                // Check if this is a valid capture: empty landing square, not visited,
+                // enemy piece in between, and that enemy hasn't been captured yet
                 if (isValidPosition(jumpRow, jumpCol) &&
                         pieces[jumpRow][jumpCol] == null &&
                         !visited[jumpRow][jumpCol] &&
@@ -616,12 +590,14 @@ public class CheckersBoard extends GridPane {
                     foundFurtherCapture = true;
                     visited[jumpRow][jumpCol] = true;
 
+                    // Build new state for recursive call
                     List<Position> newCaptured = new ArrayList<>(capturedSoFar);
                     newCaptured.add(new Position(midRow, midCol));
 
                     List<Position> newPath = new ArrayList<>(pathSoFar);
                     newPath.add(new Position(jumpRow, jumpCol));
 
+                    // Recursively look for more captures from the new position
                     exploreCaptures(piece, jumpRow, jumpCol, visited, newCaptured, newPath, allMoves);
 
                     visited[jumpRow][jumpCol] = false;
@@ -629,7 +605,8 @@ public class CheckersBoard extends GridPane {
             }
         }
 
-
+        // If no further captures possible and we've captured at least one piece,
+        // this is a complete capture sequence - add it to the moves list
         if (!foundFurtherCapture && !capturedSoFar.isEmpty()) {
             MoveType type = capturedSoFar.size() > 1 ? MoveType.MULTI_CAPTURE : MoveType.CAPTURE;
             Move move = new Move(piece.getRow(), piece.getCol(), row, col, type,
@@ -657,18 +634,215 @@ public class CheckersBoard extends GridPane {
         }
     }
 
+    /**
+     * Checks if a position has already been captured in the current capture sequence.
+     *
+     * @param row Row to check
+     * @param col Column to check
+     * @param captured List of already captured positions
+     * @return True if this position was already captured
+     */
+    private boolean isCaptured(int row, int col, List<Position> captured) {
+        for (Position pos : captured) {
+            if (pos.getRow() == row && pos.getCol() == col) {
+                return true;
+            }
+        }
+        return false;
+    }
 
+    /**
+     * Adds all possible moves for a king piece.
+     * Kings can move multiple squares diagonally in any direction and capture over distance.
+     *
+     * @param piece The king piece
+     * @param row Current row
+     * @param col Current column
+     * @param moves List to add moves to
+     */
+    private void addKingMoves(Piece piece, int row, int col, List<Move> moves) {
+        // Kings can move in all 4 diagonal directions
+        int[][] directions = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
+        for (int[] dir : directions) {
+            int dRow = dir[0];
+            int dCol = dir[1];
+
+            // Regular moves (until first obstacle)
+            for (int distance = 1; distance < SIZE; distance++) {
+                int newRow = row + dRow * distance;
+                int newCol = col + dCol * distance;
+
+                if (!isValidPosition(newRow, newCol)) break;
+
+                if (pieces[newRow][newCol] == null) {
+                    // Empty square - can move here
+                    moves.add(new Move(row, col, newRow, newCol, MoveType.NORMAL, false));
+                } else {
+                    // Found a piece - check if we can capture it
+                    if (pieces[newRow][newCol].getColor() != piece.getColor()) {
+                        // It's an opponent - check for space beyond to land
+                        addKingCaptureMove(piece, row, col, newRow, newCol, dRow, dCol, moves);
+                    }
+                    break; // Stop at first piece encountered
+                }
+            }
+        }
+
+        // Explore multi-jump capture sequences for kings
+        List<Position> initialPath = new ArrayList<>();
+        initialPath.add(new Position(row, col));
+
+        exploreKingCaptures(piece, row, col, new boolean[SIZE][SIZE], new ArrayList<>(), initialPath, moves);
+    }
+
+    /**
+     * Recursively explores all possible capture sequences for a king.
+     * Kings can capture pieces at a distance and land multiple squares beyond them.
+     *
+     * @param piece The king making captures
+     * @param row Current row position
+     * @param col Current column position
+     * @param visited Array tracking visited positions
+     * @param capturedSoFar List of captured pieces in this sequence
+     * @param pathSoFar Complete path of positions in this capture sequence
+     * @param allMoves List to add complete capture moves to
+     */
+    private void exploreKingCaptures(Piece piece, int row, int col,
+                                     boolean[][] visited, List<Position> capturedSoFar,
+                                     List<Position> pathSoFar, List<Move> allMoves) {
+        boolean foundCapture = false;
+        int[][] directions = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
+        for (int[] dir : directions) {
+            int dRow = dir[0];
+            int dCol = dir[1];
+
+            // Look for enemy pieces along this diagonal
+            for (int distance = 1; distance < SIZE; distance++) {
+                int enemyRow = row + dRow * distance;
+                int enemyCol = col + dCol * distance;
+
+                if (!isValidPosition(enemyRow, enemyCol)) break;
+
+                if (pieces[enemyRow][enemyCol] != null) {
+                    // Found a piece - check if it's an uncaptured enemy
+                    if (pieces[enemyRow][enemyCol].getColor() != piece.getColor() &&
+                            !isCaptured(enemyRow, enemyCol, capturedSoFar)) {
+
+                        // Look for all possible landing squares beyond the enemy piece
+                        for (int landDistance = 1; landDistance < SIZE; landDistance++) {
+                            int landRow = enemyRow + dRow * landDistance;
+                            int landCol = enemyCol + dCol * landDistance;
+
+                            if (!isValidPosition(landRow, landCol)) break;
+
+                            if (pieces[landRow][landCol] == null && !visited[landRow][landCol]) {
+                                // Valid landing square found
+                                foundCapture = true;
+                                visited[landRow][landCol] = true;
+
+                                List<Position> newCaptured = new ArrayList<>(capturedSoFar);
+                                newCaptured.add(new Position(enemyRow, enemyCol));
+
+                                List<Position> newPath = new ArrayList<>(pathSoFar);
+                                newPath.add(new Position(landRow, landCol));
+
+                                // Recursively look for more captures from the landing position
+                                exploreKingCaptures(piece, landRow, landCol, visited, newCaptured, newPath, allMoves);
+
+                                visited[landRow][landCol] = false;
+                            } else if (pieces[landRow][landCol] != null) {
+                                break; // Hit another piece, can't land beyond it
+                            }
+                        }
+                    }
+                    break; // Stop at first piece in this direction
+                }
+            }
+        }
+
+        // If no further captures and we've captured at least one piece,
+        // add this complete capture sequence to the moves list
+        if (!foundCapture && !capturedSoFar.isEmpty()) {
+            MoveType type = capturedSoFar.size() > 1 ? MoveType.MULTI_CAPTURE : MoveType.CAPTURE;
+            Move move = new Move(piece.getRow(), piece.getCol(), row, col, type, false);
+
+            for (Position pos : capturedSoFar) {
+                move.addCapturedPosition(pos.getRow(), pos.getCol());
+            }
+
+            for (Position pathPos : pathSoFar) {
+                move.addPathPosition(pathPos.getRow(), pathPos.getCol());
+            }
+
+            allMoves.add(move);
+
+            System.out.println("Created king capture move:");
+            System.out.println("   Path: " + pathSoFar.size() + " positions");
+        }
+    }
+
+    /**
+     * Adds a single capture move for a king where it captures one piece and lands beyond it.
+     *
+     * @param piece The king piece
+     * @param fromRow Starting row
+     * @param fromCol Starting column
+     * @param enemyRow Row of enemy piece to capture
+     * @param enemyCol Column of enemy piece to capture
+     * @param dRow Row direction (-1 or 1)
+     * @param dCol Column direction (-1 or 1)
+     * @param moves List to add moves to
+     */
+    private void addKingCaptureMove(Piece piece, int fromRow, int fromCol,
+                                    int enemyRow, int enemyCol, int dRow, int dCol,
+                                    List<Move> moves) {
+        // Find all possible landing positions beyond the enemy piece
+        for (int distance = 1; distance < SIZE; distance++) {
+            int landRow = enemyRow + dRow * distance;
+            int landCol = enemyCol + dCol * distance;
+
+            if (!isValidPosition(landRow, landCol)) break;
+
+            if (pieces[landRow][landCol] == null) {
+                Move move = new Move(fromRow, fromCol, landRow, landCol, MoveType.CAPTURE, false);
+                move.addCapturedPosition(enemyRow, enemyCol);
+                moves.add(move);
+            } else {
+                break; // Hit another piece
+            }
+        }
+    }
+
+    /**
+     * Checks if a piece should be promoted to king after moving to a new row.
+     * Regular pieces promote when reaching the opposite end of the board.
+     *
+     * @param piece The piece to check
+     * @param newRow The row the piece is moving to
+     * @return True if the piece should be promoted
+     */
     private boolean checkPromotion(Piece piece, int newRow) {
         if (piece.isKing()) return false;
         return newRow == 0;
     }
 
-
+    /**
+     * Checks if a position is within the board boundaries.
+     *
+     * @param row Row to check
+     * @param col Column to check
+     * @return True if position is valid
+     */
     private boolean isValidPosition(int row, int col) {
         return row >= 0 && row < SIZE && col >= 0 && col < SIZE;
     }
 
-
+    /**
+     * Resizes the board and all its elements based on available space.
+     * Maintains square aspect ratio and updates all piece sizes.
+     */
     private void resizeBoard() {
         double size = Math.min(getWidth(), getHeight());
         cellSize = size / SIZE;
@@ -691,10 +865,13 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Встановити стан дошки з масиву
+     * Sets the board state from a 2D array representation.
+     * Clears existing pieces and creates new ones based on the provided state.
+     *
+     * @param boardState 2D array where each value represents a piece type
      */
     public void setBoardState(int[][] boardState) {
-        // Очистити поточну дошку
+        // Clear current board
         for (int row = 0; row < SIZE; row++) {
             for (int col = 0; col < SIZE; col++) {
                 if (pieces[row][col] != null) {
@@ -704,7 +881,7 @@ public class CheckersBoard extends GridPane {
             }
         }
 
-        // Встановити новий стан
+        // Set new state
         for (int row = 0; row < SIZE; row++) {
             for (int col = 0; col < SIZE; col++) {
                 PieceType type = PieceType.fromValue(boardState[row][col]);
@@ -718,7 +895,10 @@ public class CheckersBoard extends GridPane {
     }
 
     /**
-     * Отримати поточний стан дошки як масив
+     * Gets the current board state as a 2D array.
+     * Each element contains the piece type value at that position.
+     *
+     * @return 2D array representing the board state
      */
     public int[][] getBoardState() {
         int[][] state = new int[SIZE][SIZE];
@@ -731,40 +911,83 @@ public class CheckersBoard extends GridPane {
         return state;
     }
 
+    /**
+     * Gets the current turn color.
+     *
+     * @return PieceColor representing whose turn it is
+     */
     public PieceColor getCurrentTurn() {
         return currentTurn;
     }
 
+    /**
+     * Sets the current turn and deselects any selected piece.
+     *
+     * @param turn The color whose turn it is
+     */
     public void setCurrentTurn(PieceColor turn) {
         this.currentTurn = turn;
         deselectPiece();
     }
 
+    /**
+     * Sets the callback to be invoked when a move is attempted.
+     *
+     * @param callback Callback function to handle move attempts
+     */
     public void setOnMoveAttempt(MoveCallback callback) {
         this.onMoveAttempt = callback;
     }
 
+    /**
+     * Sets the callback to be invoked when a piece is selected.
+     *
+     * @param callback Callback function to handle piece selection
+     */
     public void setOnPieceSelected(SelectionCallback callback) {
         this.onPieceSelected = callback;
     }
 
+    /**
+     * Sets the color assigned to this player.
+     * Only pieces of this color can be selected and moved.
+     *
+     * @param myColor The player's assigned color
+     */
     public void setMyColor(PieceColor myColor) {
         this.myColor = myColor;
     }
 
+    /**
+     * Gets the currently selected piece.
+     *
+     * @return The selected piece, or null if none selected
+     */
     public Piece getSelectedPiece() {
         return selectedPiece;
     }
 
+    /**
+     * Checks if an animation is currently playing.
+     *
+     * @return True if animating
+     */
     public boolean isAnimating() {
         return animating;
     }
 
+    /**
+     * Callback interface for handling move attempts.
+     * Typically implemented to send moves to the server.
+     */
     @FunctionalInterface
     public interface MoveCallback {
         void onMove(Move move);
     }
 
+    /**
+     * Callback interface for handling piece selection events.
+     */
     @FunctionalInterface
     public interface SelectionCallback {
         void onPieceSelected(Piece piece);

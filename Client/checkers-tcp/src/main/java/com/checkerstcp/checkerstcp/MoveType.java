@@ -1,7 +1,10 @@
 package com.checkerstcp.checkerstcp;
 
+/**
+ * Types of moves in checkers.
+ */
 public enum MoveType {
-    NORMAL,
-    CAPTURE,
-    MULTI_CAPTURE
+    NORMAL,          // Simple diagonal move
+    CAPTURE,         // Single jump capture
+    MULTI_CAPTURE    // Multiple consecutive captures
 }
